@@ -29,9 +29,9 @@ Quando houver necessidade de persistencia de conta, configuracoes e mundos, a ca
 
 ## Norte da Fase Atual
 
-- Colocar o produto em pe com o fluxo base: autenticacao -> menu principal -> lista de mundos -> entrada no mundo 3D.
-- Priorizar funcionamento e navegacao antes de sistemas avancados.
-- Trabalhar com placeholders visuais onde necessario, deixando texturas detalhadas para uma fase posterior.
+- PRD-001 implementada: autenticacao, sessao, configuracoes persistentes e catalogo base de mundos.
+- PRD-002 implementada: menu principal `MineWorld`, lobby de mundos, criacao e exclusao definitiva, tela de `Opcoes`.
+- Proxima frente: PRD-003 para abrir o mundo 3D procedural com camera em primeira pessoa e movimento basico.
 
 ## Regras de Produto Consolidadas
 
@@ -51,9 +51,9 @@ Quando houver necessidade de persistencia de conta, configuracoes e mundos, a ca
 
 | ID | Titulo | Status | Dependencias | Resumo |
 |----|--------|--------|--------------|--------|
-| PRD-001 | Sistema de contas e persistencia base | Em validacao | - | Cadastro, login, sessao e base para salvar configuracoes e catalogo de mundos por usuario. |
-| PRD-002 | Menus principais e lobby de mundos | Em validacao | PRD-001 | Fluxo autenticado com menu `MineWorld`, tela de mundos, criacao de novo mundo e exclusao definitiva com confirmacao. |
-| PRD-003 | Mundo 3D procedural jogavel | Em validacao | PRD-001, PRD-002 | Entrada em um mundo procedural 3D com camera em primeira pessoa, movimento basico e carregamento sob demanda. |
+| PRD-001 | Sistema de contas e persistencia base | Implementada | - | Cadastro, login, sessao e base para salvar configuracoes e catalogo de mundos por usuario. |
+| PRD-002 | Menus principais e lobby de mundos | Implementada | PRD-001 | Fluxo autenticado com menu `MineWorld`, tela de mundos, criacao de novo mundo e exclusao definitiva com confirmacao. |
+| PRD-003 | Mundo 3D procedural jogavel | Planejada | PRD-001, PRD-002 | Entrada em um mundo procedural 3D com camera em primeira pessoa, movimento basico e carregamento sob demanda. |
 
 ## Fora do Escopo Atual
 

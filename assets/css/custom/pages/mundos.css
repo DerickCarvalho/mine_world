@@ -1,0 +1,212 @@
+.app-shell__card--mundos {
+    width: min(1180px, 100%);
+}
+
+.worlds-screen {
+    display: grid;
+    gap: 1.4rem;
+}
+
+.worlds-screen__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+}
+
+.worlds-screen__eyebrow,
+.worlds-panel__eyebrow {
+    margin: 0 0 0.45rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    font-size: 0.78rem;
+    color: var(--accent);
+}
+
+.worlds-screen__header h1,
+.worlds-panel__header h2,
+.worlds-detail h2 {
+    margin: 0;
+}
+
+.worlds-screen__copy {
+    margin: 0.55rem 0 0;
+    max-width: 56ch;
+    color: var(--text-300);
+    line-height: 1.6;
+}
+
+.worlds-screen__layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+    gap: 1.25rem;
+    align-items: start;
+}
+
+.worlds-panel {
+    display: grid;
+    gap: 1rem;
+    padding: 1.25rem;
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.worlds-panel__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+}
+
+.worlds-panel__header--compact {
+    align-items: flex-start;
+}
+
+.worlds-panel__count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    padding: 0.4rem 0.8rem;
+    border-radius: 999px;
+    background: rgba(93, 201, 143, 0.12);
+    color: var(--text-100);
+    font-size: 0.88rem;
+}
+
+.worlds-empty {
+    display: grid;
+    gap: 0.35rem;
+    padding: 1.1rem 1.15rem;
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.035);
+    border: 1px dashed rgba(255, 255, 255, 0.12);
+}
+
+.worlds-empty strong,
+.worlds-empty p {
+    margin: 0;
+}
+
+.worlds-empty p {
+    color: var(--text-300);
+    line-height: 1.6;
+}
+
+.worlds-list {
+    display: grid;
+    gap: 0.85rem;
+}
+
+.world-card {
+    width: 100%;
+    display: grid;
+    gap: 0.35rem;
+    padding: 1rem 1.05rem;
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-100);
+    text-align: left;
+    cursor: pointer;
+    transition: transform 0.16s ease, border-color 0.16s ease, background-color 0.16s ease;
+}
+
+.world-card:hover {
+    transform: translateY(-1px);
+    border-color: rgba(93, 201, 143, 0.28);
+}
+
+.world-card.is-selected {
+    border-color: rgba(93, 201, 143, 0.55);
+    background: rgba(93, 201, 143, 0.11);
+}
+
+.world-card__title {
+    font-weight: 700;
+    font-size: 1rem;
+}
+
+.world-card__meta {
+    color: var(--text-300);
+    font-size: 0.92rem;
+    line-height: 1.45;
+}
+
+.worlds-panel--side {
+    align-content: start;
+}
+
+.worlds-detail,
+.worlds-create {
+    display: grid;
+    gap: 0.9rem;
+}
+
+.worlds-detail__copy {
+    margin: 0;
+    color: var(--text-300);
+    line-height: 1.6;
+}
+
+.worlds-detail__meta {
+    display: grid;
+    gap: 0.8rem;
+    margin: 0;
+}
+
+.worlds-detail__meta div {
+    display: grid;
+    gap: 0.2rem;
+}
+
+.worlds-detail__meta dt {
+    color: var(--text-300);
+    font-size: 0.84rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.worlds-detail__meta dd {
+    margin: 0;
+}
+
+.worlds-detail__banner {
+    padding: 0.9rem 1rem;
+    border-radius: var(--radius-md);
+    background: rgba(93, 201, 143, 0.12);
+    color: var(--text-100);
+    line-height: 1.55;
+}
+
+.world-create-form {
+    display: grid;
+    gap: 1rem;
+}
+
+.worlds-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.worlds-button--danger {
+    background: rgba(240, 113, 120, 0.18);
+    color: #ffdce0;
+    border: 1px solid rgba(240, 113, 120, 0.35);
+}
+
+@media (max-width: 960px) {
+    .worlds-screen__layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 720px) {
+    .worlds-screen__header,
+    .worlds-panel__header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}

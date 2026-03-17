@@ -6,7 +6,7 @@
 |-------|-------|
 | **PRD** | [PRD-002-menus-lobby.md](../PRD-002-menus-lobby.md) |
 | **PRD Tecnica** | [PRD-TECNICA-002-menus-lobby.md](../PRD-TECNICA-002-menus-lobby.md) |
-| **Status** | Pendente |
+| **Status** | Concluida |
 | **Depende de** | TASK-001 |
 | **Bloqueia** | PRD-003 |
 
