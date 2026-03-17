@@ -6,7 +6,7 @@
 |-------|-------|
 | **PRD** | [PRD-003-mundo-3d-procedural.md](../PRD-003-mundo-3d-procedural.md) |
 | **PRD Tecnica** | [PRD-TECNICA-003-mundo-3d-procedural.md](../PRD-TECNICA-003-mundo-3d-procedural.md) |
-| **Status** | Pendente |
+| **Status** | Concluida |
 | **Depende de** | TASK-004 |
 | **Bloqueia** | TASK-006 |
 

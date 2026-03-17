@@ -50,8 +50,8 @@ Ao final das PRDs anteriores, o projeto deve contar com autenticacao, shell aute
 ### Dependencias Tecnicas
 
 - PRD-001 e PRD-002 implementadas ou tecnicamente disponiveis
-- Browser desktop moderno com suporte a ES modules e WebGL
-- Biblioteca 3D versionada localmente em `assets/vendor/three/`
+- Browser desktop moderno com suporte a ES modules e Canvas 2D
+- Runtime 3D autocontido em `assets/js/game/`, sem bundler e sem dependencia externa nesta primeira versao
 
 ---
 
@@ -61,7 +61,7 @@ Ao final das PRDs anteriores, o projeto deve contar com autenticacao, shell aute
 
 Implementar a tela de jogo como pagina autenticada `index.php?page=jogo&id_mundo={id}`. O shell PHP continua responsavel por autenticar e carregar o HTML da pagina, enquanto o runtime 3D e iniciado por um script module em JS Vanilla.
 
-Para tornar a entrega viavel sem framework e sem bundler, a renderizacao 3D sera apoiada por `three.js` versionada localmente. A aplicacao continua Vanilla JS: sem React, Vue, build step ou transpiler. A biblioteca sera usada apenas como camada de renderizacao e utilitarios 3D.
+Para manter a entrega autocontida e sem dependencias externas, a renderizacao 3D usa um renderer proprio em `canvas`, com projecao em perspectiva, painter's algorithm e geometria de faces geradas por chunk. A aplicacao continua Vanilla JS: sem React, Vue, build step ou transpiler.
 
 O mundo sera logicamente de `5000 x 5000 x 100`, mas o cliente nunca materializara essa area total. A geracao sera deterministica por seed e feita por chunking horizontal. A representacao inicial sera um terreno de colunas bloco-a-bloco derivado de heightmap procedural, suficiente para locomocao, colisao e leitura visual do relevo sem ainda suportar mineracao ou construcao.
 
@@ -83,9 +83,9 @@ index.php?page=jogo&id_mundo=ID
 
 ### Decisoes Estruturais
 
-- Usar `three.js` local como engine de renderizacao, mantendo JS Vanilla no restante.
-- Chunk horizontal de `32 x 32` blocos e altura logica fixa `100`.
-- Raio de carga inicial de `4` chunks e raio de retencao de `6` chunks.
+- Usar renderer proprio em Canvas 2D, mantendo JS Vanilla em toda a stack do runtime.
+- Chunk horizontal de `16 x 16` blocos e altura logica fixa `100`.
+- Raio de carga derivado de `render_distance`, operando na pratica entre `2` e `4` chunks, com retencao de `+1`.
 - Geracao baseada em heightmap com ruido deterministico em vez de volume completo com cavernas na primeira versao.
 - Colisao baseada em solido por coluna e AABB simples do jogador.
 
@@ -111,7 +111,7 @@ Adicionar suporte a `index.php?page=jogo&id_mundo={id}` no roteador, criar `page
 **Acao:** Criar
 
 **Responsabilidade tecnica:**
-Criar `assets/js/paginas/jogo.js` e `assets/js/game/GameApp.js` para instanciar renderer, scene, camera, loop de update, resize e cleanup. O bootstrap tambem deve buscar os metadados do mundo selecionado e aplicar configuracoes do usuario relevantes.
+Criar `assets/js/paginas/jogo.js` e `assets/js/game/GameApp.js` para instanciar renderer, runtime, camera, loop de update, resize e cleanup. O bootstrap tambem deve buscar os metadados do mundo selecionado e aplicar configuracoes do usuario relevantes.
 
 **Pontos de atencao:**
 - Garantir destruicao do loop e dos listeners ao sair da pagina.
@@ -219,8 +219,8 @@ Criar modulos e CSS para crosshair, tela de carregamento, mensagens de estado e 
 | Risco | Impacto | Mitigacao |
 |-------|---------|-----------|
 | Tentativa de implementar voxel completo logo na primeira versao | Alto | Limitar a versao inicial a terreno por heightmap com faces expostas |
-| Queda de performance por chunks pesados | Alto | Chunk `32x32`, fila de geracao e descarte por distancia |
-| Dependencia em engine 3D parecer fora do escopo Vanilla | Medio | Manter toda a arquitetura da app em JS Vanilla e versionar `three.js` localmente sem bundler |
+| Queda de performance por chunks pesados | Alto | Chunk `16x16`, fila de geracao e descarte por distancia |
+| Renderer proprio exigir compromissos de fidelidade visual | Medio | Priorizar legibilidade do relevo, chunking e controls antes de texturas e efeitos avancados |
 | Colisao ficar inconsistente em bordas de chunk | Medio | Centralizar consulta de altura/solidez no `ChunkStore` e testar bordas manualmente |
 
 ---
@@ -240,7 +240,7 @@ Criar modulos e CSS para crosshair, tela de carregamento, mensagens de estado e 
 
 | Task | Objetivo | Dependencias |
 |------|----------|--------------|
-| [TASK-001](./tasks/TASK-001-preparar-rota-runtime-3d.md) | Preparar rota de jogo, pagina e assets 3D base | PRD-002 concluida |
+| [TASK-001](./tasks/TASK-001-preparar-rota-runtime-3d.md) | Preparar rota de jogo, pagina e runtime 3D base | PRD-002 concluida |
 | [TASK-002](./tasks/TASK-002-implementar-bootstrap-do-mundo.md) | Carregar metadados do mundo e iniciar o runtime | TASK-001 |
 | [TASK-003](./tasks/TASK-003-implementar-gerador-procedural.md) | Implementar geracao por seed e configuracao do mundo | TASK-002 |
 | [TASK-004](./tasks/TASK-004-implementar-chunks-e-mesh.md) | Implementar chunk manager e mesher com blocos placeholder | TASK-003 |
@@ -251,4 +251,4 @@ Criar modulos e CSS para crosshair, tela de carregamento, mensagens de estado e 
 
 ## Rollback
 
-Remover a rota `page=jogo`, os modulos `assets/js/game/`, a vendor local de `three.js` e os estilos/HTML da pagina de jogo. Como esta PRD nao altera a persistencia estrutural de banco alem do uso de metadados ja existentes, o rollback pode ser feito sem migracoes adicionais.
+Remover a rota `page=jogo`, os modulos `assets/js/game/` e os estilos/HTML da pagina de jogo. Como esta PRD nao altera a persistencia estrutural de banco alem do uso de metadados ja existentes, o rollback pode ser feito sem migracoes adicionais.

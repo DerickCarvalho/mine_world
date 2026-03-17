@@ -3,6 +3,7 @@ $allowedPages = [
     'menu',
     'mundos',
     'opcoes',
+    'jogo',
 ];
 
 $page = filter_input(INPUT_GET, 'page', FILTER_SANITIZE_SPECIAL_CHARS) ?: 'menu';
@@ -16,6 +17,7 @@ $pageTitles = [
     'menu' => 'MineWorld - Menu',
     'mundos' => 'MineWorld - Mundos',
     'opcoes' => 'MineWorld - Opcoes',
+    'jogo' => 'MineWorld - Jogo',
 ];
 
 $pageTitle = $pageTitles[$page] ?? 'MineWorld';
@@ -23,6 +25,7 @@ $pageCssPath = __DIR__ . '/assets/css/custom/pages/' . $page . '.css';
 $pageCssHref = 'assets/css/custom/pages/' . $page . '.css';
 $pageJsPath = __DIR__ . '/assets/js/paginas/' . $page . '.js';
 $pageJsHref = 'assets/js/paginas/' . $page . '.js';
+$pageJsType = $page === 'jogo' ? 'module' : 'text/javascript';
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -45,7 +48,7 @@ $pageJsHref = 'assets/js/paginas/' . $page . '.js';
 <script src="assets/js/ApiRequest.js"></script>
 <script src="assets/js/auth.js"></script>
 <?php if (is_file($pageJsPath)) : ?>
-<script src="<?php echo htmlspecialchars($pageJsHref, ENT_QUOTES, 'UTF-8'); ?>"></script>
+<script type="<?php echo htmlspecialchars($pageJsType, ENT_QUOTES, 'UTF-8'); ?>" src="<?php echo htmlspecialchars($pageJsHref, ENT_QUOTES, 'UTF-8'); ?>"></script>
 <?php endif; ?>
 <script>
 window.addEventListener('DOMContentLoaded', function () {

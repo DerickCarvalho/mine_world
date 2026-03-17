@@ -31,7 +31,8 @@ Quando houver necessidade de persistencia de conta, configuracoes e mundos, a ca
 
 - PRD-001 implementada: autenticacao, sessao, configuracoes persistentes e catalogo base de mundos.
 - PRD-002 implementada: menu principal `MineWorld`, lobby de mundos, criacao e exclusao definitiva, tela de `Opcoes`.
-- Proxima frente: PRD-003 para abrir o mundo 3D procedural com camera em primeira pessoa e movimento basico.
+- PRD-003 implementada: rota `jogo`, mundo procedural por seed, carga por chunks, HUD minimo e movimento em primeira pessoa.
+- Proxima frente: evoluir o runtime 3D com texturas, interacao com blocos e persistencia de alteracoes do terreno.
 
 ## Regras de Produto Consolidadas
 
@@ -53,7 +54,7 @@ Quando houver necessidade de persistencia de conta, configuracoes e mundos, a ca
 |----|--------|--------|--------------|--------|
 | PRD-001 | Sistema de contas e persistencia base | Implementada | - | Cadastro, login, sessao e base para salvar configuracoes e catalogo de mundos por usuario. |
 | PRD-002 | Menus principais e lobby de mundos | Implementada | PRD-001 | Fluxo autenticado com menu `MineWorld`, tela de mundos, criacao de novo mundo e exclusao definitiva com confirmacao. |
-| PRD-003 | Mundo 3D procedural jogavel | Planejada | PRD-001, PRD-002 | Entrada em um mundo procedural 3D com camera em primeira pessoa, movimento basico e carregamento sob demanda. |
+| PRD-003 | Mundo 3D procedural jogavel | Implementada | PRD-001, PRD-002 | Entrada em um mundo procedural 3D com renderer proprio em canvas, camera em primeira pessoa, movimento basico e carregamento sob demanda. |
 
 ## Fora do Escopo Atual
 
@@ -68,4 +69,4 @@ Quando houver necessidade de persistencia de conta, configuracoes e mundos, a ca
 
 - Definir o sistema de texturas para blocos
 - Detalhar formato de persistencia de mundos gerados e alteracoes futuras
-- Planejar HUD e opcoes iniciais de jogo
+- Planejar quebrar/colocar blocos e salvamento de alteracoes locais

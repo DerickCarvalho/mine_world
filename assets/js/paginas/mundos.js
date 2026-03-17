@@ -16,6 +16,7 @@
             detailCreated: document.querySelector('[data-world-detail-created]'),
             detailUpdated: document.querySelector('[data-world-detail-updated]'),
             createForm: document.getElementById('world-create-form'),
+            playButton: document.querySelector('[data-action="play-world"]'),
             refreshButton: document.querySelector('[data-action="refresh-worlds"]'),
             deleteButton: document.querySelector('[data-action="delete-world"]')
         };
@@ -93,6 +94,7 @@
         elements.list.innerHTML = '';
         elements.empty.hidden = state.worlds.length > 0;
         elements.count.textContent = formatCount(state.worlds.length);
+        elements.playButton.disabled = !selectedWorld;
         elements.deleteButton.disabled = !selectedWorld;
 
         state.worlds.forEach(function (world) {
@@ -259,11 +261,26 @@
         );
     }
 
+    function enterSelectedWorld() {
+        const selectedWorld = getSelectedWorld();
+
+        if (!selectedWorld) {
+            window.showAlert('Selecione um mundo antes de tentar jogar.');
+            return;
+        }
+
+        window.location.href = window.ENV.DOMAIN + '/index.php?page=jogo&id_mundo=' + encodeURIComponent(selectedWorld.id);
+    }
+
     function bindEvents() {
         const elements = getElements();
 
         if (elements.createForm) {
             elements.createForm.addEventListener('submit', handleCreateSubmit);
+        }
+
+        if (elements.playButton) {
+            elements.playButton.addEventListener('click', enterSelectedWorld);
         }
 
         if (elements.refreshButton) {

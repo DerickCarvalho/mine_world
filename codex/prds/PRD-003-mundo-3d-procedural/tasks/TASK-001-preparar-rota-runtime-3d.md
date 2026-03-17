@@ -6,7 +6,7 @@
 |-------|-------|
 | **PRD** | [PRD-003-mundo-3d-procedural.md](../PRD-003-mundo-3d-procedural.md) |
 | **PRD Tecnica** | [PRD-TECNICA-003-mundo-3d-procedural.md](../PRD-TECNICA-003-mundo-3d-procedural.md) |
-| **Status** | Pendente |
+| **Status** | Concluida |
 | **Depende de** | Nenhuma |
 | **Bloqueia** | TASK-002 |
 
@@ -26,7 +26,7 @@ Preparar a rota autenticada de jogo, a pagina `jogo` e a base de assets/modulos 
 | `pages/jogo.php` | Criar | Novo arquivo |
 | `assets/js/paginas/jogo.js` | Criar | Novo arquivo |
 | `assets/js/game/` | Criar | Nova pasta |
-| `assets/vendor/three/` | Criar | Vendor local |
+| `assets/js/game/render/` | Criar | Renderer e pipeline visual |
 | `assets/css/custom/pages/jogo.css` | Criar | Novo arquivo |
 
 ---
@@ -35,7 +35,7 @@ Preparar a rota autenticada de jogo, a pagina `jogo` e a base de assets/modulos 
 
 1. Ajustar o roteador autenticado para aceitar `page=jogo`.
 2. Criar `pages/jogo.php` com canvas, HUD minimo e placeholders de loading.
-3. Versionar localmente a biblioteca 3D escolhida e seus auxiliares necessarios.
+3. Estruturar o renderer 3D proprio e os auxiliares necessarios dentro de `assets/js/game/`.
 4. Criar `assets/js/paginas/jogo.js` como entrypoint module.
 5. Estruturar a pasta `assets/js/game/` para os modulos do runtime.
 
@@ -51,10 +51,10 @@ Preparar a rota autenticada de jogo, a pagina `jogo` e a base de assets/modulos 
 
 ## Checklist de Validacao
 
-- [ ] Rota `page=jogo` funcionando
-- [ ] Pagina de jogo carregando assets sem erro
-- [ ] Vendor 3D local integrado
-- [ ] Entry module pronto para evolucao
+- [x] Rota `page=jogo` funcionando
+- [x] Pagina de jogo carregando assets sem erro
+- [x] Runtime 3D base integrado
+- [x] Entry module pronto para evolucao
 
 ---
 
@@ -74,7 +74,7 @@ Preparar a rota autenticada de jogo, a pagina `jogo` e a base de assets/modulos 
 
 ## Rollback
 
-Remover `page=jogo`, `pages/jogo.php`, `assets/js/paginas/jogo.js`, `assets/js/game/`, `assets/vendor/three/` e `assets/css/custom/pages/jogo.css`.
+Remover `page=jogo`, `pages/jogo.php`, `assets/js/paginas/jogo.js`, `assets/js/game/` e `assets/css/custom/pages/jogo.css`.
 
 ---
 

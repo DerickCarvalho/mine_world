@@ -82,6 +82,7 @@
             </section>
 
             <div class="worlds-actions">
+                <button class="button button--primary button--small" type="button" data-action="play-world" disabled>Entrar no mundo</button>
                 <button class="button button--ghost button--small" type="button" data-action="refresh-worlds">Atualizar</button>
                 <button class="button worlds-button--danger button--small" type="button" data-action="delete-world" disabled>Excluir mundo</button>
             </div>
