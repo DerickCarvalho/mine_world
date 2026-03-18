@@ -1,15 +1,15 @@
 export class SceneOverlay {
     constructor(root) {
         this.root = root;
-        this.blocking = root.querySelector('[data-scene-overlay]');
-        this.title = root.querySelector('[data-overlay-title]');
-        this.message = root.querySelector('[data-overlay-message]');
-        this.actionButton = root.querySelector('[data-overlay-action]');
-        this.instruction = root.querySelector('[data-overlay-instruction]');
-        this.worldName = root.querySelector('[data-game-world-name]');
-        this.status = root.querySelector('[data-game-status]');
-        this.coords = root.querySelector('[data-game-coords]');
-        this.chunkCount = root.querySelector('[data-game-chunk-count]');
+        this.blocking = root ? root.querySelector('[data-scene-overlay]') : null;
+        this.title = root ? root.querySelector('[data-overlay-title]') : null;
+        this.message = root ? root.querySelector('[data-overlay-message]') : null;
+        this.actionButton = root ? root.querySelector('[data-overlay-action]') : null;
+        this.instruction = root ? root.querySelector('[data-overlay-instruction]') : null;
+        this.status = root ? root.querySelector('[data-game-status]') : null;
+        this.coords = root ? root.querySelector('[data-game-coords]') : null;
+        this.coordsChip = root ? root.querySelector('[data-game-coords-chip]') : null;
+        this.target = root ? root.querySelector('[data-game-target]') : null;
         this.actionHandler = null;
 
         if (this.actionButton) {
@@ -90,15 +90,15 @@ export class SceneOverlay {
         }
     }
 
-    setWorldName(name) {
-        if (this.worldName) {
-            this.worldName.textContent = name || 'Mundo';
-        }
-    }
-
     setStatus(text) {
         if (this.status) {
             this.status.textContent = text;
+        }
+    }
+
+    setTarget(text) {
+        if (this.target) {
+            this.target.textContent = text || 'Nenhum';
         }
     }
 
@@ -110,9 +110,9 @@ export class SceneOverlay {
         this.coords.textContent = 'X ' + position.x.toFixed(1) + ' | Y ' + position.y.toFixed(1) + ' | Z ' + position.z.toFixed(1);
     }
 
-    setChunkCount(count) {
-        if (this.chunkCount) {
-            this.chunkCount.textContent = String(count);
+    setCoordsVisible(visible) {
+        if (this.coordsChip) {
+            this.coordsChip.hidden = !visible;
         }
     }
 }

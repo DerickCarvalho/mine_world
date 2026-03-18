@@ -8,27 +8,23 @@ $user = require_auth_user();
 $service = new funcoesPDO();
 $data = request_data();
 $worldId = (int) ($data['id'] ?? $data['id_mundo'] ?? 0);
+$chunks = world_normalize_chunk_payloads($data['chunks'] ?? []);
 
 if ($worldId <= 0) {
-    respond_error('Informe um mundo valido para continuar.', 422);
+    respond_error('Informe um mundo valido para salvar os chunks.', 422);
 }
 
 $world = find_world_by_owner($service, $worldId, (int) $user['id']);
-
 if ($world === null) {
     respond_error('Mundo nao encontrado para a conta autenticada.', 404);
 }
 
-$saveState = load_world_state_by_world_id($service, $worldId);
-$chunkStats = [
-    'cached_chunks_count' => world_count_cached_chunks_by_world_id($service, $worldId),
-];
+$result = save_world_chunks($service, $worldId, $chunks);
 
 respond_ok(
-    'Mundo carregado com sucesso.',
+    'Chunks salvos com sucesso.',
     [
-        'world' => world_payload($world),
-        'save_state' => $saveState,
-        'chunk_stats' => $chunkStats,
+        'saved_count' => $result['saved_count'],
+        'cached_chunks_count' => $result['cached_chunks_count'],
     ]
 );

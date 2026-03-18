@@ -33,7 +33,9 @@ Quando houver necessidade de persistencia de conta, configuracoes e mundos, a ca
 - PRD-002 implementada: menu principal `MineWorld`, lobby de mundos, criacao e exclusao definitiva, tela de `Opcoes`.
 - PRD-003 implementada: rota `jogo`, mundo procedural por seed, carga por chunks, HUD minimo e movimento em primeira pessoa.
 - PRD-004 implementada: locomocao alinhada a camera, controle natural do mouse, pausa com `P`, `Salvar e sair` e retomada no ultimo ponto salvo.
-- Proxima frente: evoluir o runtime 3D com texturas, interacao com blocos e persistencia mais ampla do terreno.
+- PRD-005 implementada: mao em primeira pessoa, hotbar/inventario simples, quebrar/colocar blocos, superficie com arvores/agua/areia/pedra e nevoa de distancia.
+- PRD-006 implementada: cache persistente de chunks, pre-geracao inicial, HUD contextual, configuracoes em runtime e camada de bedrock.
+- Proxima frente apos PRD-006: texturas, crafting e progressao sandbox mais completa.
 
 ## Regras de Produto Consolidadas
 
@@ -45,14 +47,25 @@ Quando houver necessidade de persistencia de conta, configuracoes e mundos, a ca
 - O primeiro mundo jogavel deve ser procedural.
 - A escala do jogo deve considerar `1 bloco = 1m x 1m x 1m`.
 - O mundo inicial deve ter dimensao logica de `5000 x 5000 x 100` blocos.
-- A versao inicial nao inclui quebrar ou colocar blocos.
 - O jogador deve controlar camera em primeira pessoa com cursor, mouse, `WASD` e `espaco`.
 - O movimento na gameplay deve seguir a orientacao horizontal da camera.
 - O mouse deve controlar a camera com leitura natural por padrao, sem inversao vertical inesperada.
 - A tecla `P` deve abrir o menu de pausa e suspender de fato a gameplay.
 - `Salvar e sair` deve persistir o estado necessario do mundo e do jogador antes de retornar ao menu principal.
 - Ao reabrir um mundo salvo, o jogador deve nascer no ultimo ponto persistido valido.
-- O tamanho do mundo e um alvo logico; o cliente nao deve depender de carregar a area total de uma vez.
+- A gameplay deve exibir mao em primeira pessoa com feedback visual de movimento e uso.
+- A gameplay deve oferecer hotbar de 9 slots e inventario simples de 27 slots para blocos.
+- O jogador deve conseguir quebrar e colocar blocos dentro de um alcance controlado.
+- O jogador deve iniciar sem kit basico e coletar blocos a partir da quebra do mundo.
+- O estado salvo do mundo deve poder refletir inventario e mutacoes do terreno.
+- A geracao procedural deve incluir arvores, agua, areia proxima da agua e pedra aparente na superficie.
+- A cena deve aplicar nevoa para mascarar melhor a distancia e a borda visual do mapa.
+- Coordenadas devem aparecer somente quando o jogador alternar a visualizacao com `C`.
+- Dados do mundo devem aparecer somente no menu aberto por `P`.
+- Configuracoes devem poder ser editadas durante a gameplay com aplicacao automatica.
+- O mundo deve persistir chunks geradas e reaproveita-las em entradas futuras.
+- Ao criar um mundo novo, uma janela inicial de chunks deve ser pre-gerada antes do spawn.
+- A camada mais profunda do mapa deve ser formada por `bedrock` inquebravel.
 
 ## PRDs Ativas
 
@@ -62,18 +75,18 @@ Quando houver necessidade de persistencia de conta, configuracoes e mundos, a ca
 | PRD-002 | Menus principais e lobby de mundos | Implementada | PRD-001 | Fluxo autenticado com menu `MineWorld`, tela de mundos, criacao de novo mundo e exclusao definitiva com confirmacao. |
 | PRD-003 | Mundo 3D procedural jogavel | Implementada | PRD-001, PRD-002 | Entrada em um mundo procedural 3D com renderer proprio em canvas, camera em primeira pessoa, movimento basico e carregamento sob demanda. |
 | PRD-004 | Refino de gameplay, pausa e persistencia de mundo | Implementada | PRD-003 | Refinar locomocao e camera, reduzir travamentos, adicionar pause menu com `P`, salvar/sair e retomada no ultimo ponto salvo. |
+| PRD-005 | Loop sandbox com inventario e superficie viva | Implementada | PRD-004 | Adicionar mao em primeira pessoa, hotbar/inventario simples, quebrar/colocar blocos, enriquecer a superficie procedural e aplicar nevoa de distancia. |
+| PRD-006 | Cache de chunks, HUD contextual e refinamento in-game | Implementada | PRD-004, PRD-005 | Persistir chunks por mundo, pre-gerar a janela inicial, mover HUD tecnica para atalhos/contexto, permitir configuracoes em runtime e proteger a base com bedrock. |
 
 ## Fora do Escopo Atual
 
 - Sistema de texturas completo
-- Quebrar blocos
-- Colocar blocos
 - Multiplayer
-- Inventario, crafting e mobs
+- Crafting, fornalha, ferramentas e mobs
 - Conta social, recuperacao de senha e email transacional
 
 ## Backlog de Curto Prazo
 
 - Definir o sistema de texturas para blocos
-- Detalhar formato de persistencia de mundos gerados e alteracoes futuras
-- Planejar quebrar/colocar blocos e salvamento de alteracoes locais
+- Planejar serializacao mais eficiente para chunks grandes
+- Planejar progressao sandbox depois do primeiro loop de construcao persistente

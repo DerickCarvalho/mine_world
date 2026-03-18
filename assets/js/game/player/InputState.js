@@ -11,6 +11,12 @@ export class InputState {
         this.locked = false;
         this.gameplayEnabled = true;
         this.pauseToggleRequested = false;
+        this.coordsToggleRequested = false;
+        this.inventoryToggleRequested = false;
+        this.primaryActionRequested = false;
+        this.secondaryActionRequested = false;
+        this.hotbarIndexRequested = null;
+        this.hotbarScrollDelta = 0;
         this.onPointerLockChange = null;
 
         this.handleClick = this.handleClick.bind(this);
@@ -19,6 +25,9 @@ export class InputState {
         this.handleKeyDown = this.handleKeyDown.bind(this);
         this.handleKeyUp = this.handleKeyUp.bind(this);
         this.handleWindowBlur = this.handleWindowBlur.bind(this);
+        this.handleMouseDown = this.handleMouseDown.bind(this);
+        this.handleContextMenu = this.handleContextMenu.bind(this);
+        this.handleWheel = this.handleWheel.bind(this);
     }
 
     attach() {
@@ -28,6 +37,9 @@ export class InputState {
         document.addEventListener('pointerlockchange', this.handlePointerLockChange);
         document.addEventListener('mousemove', this.handleMouseMove);
         this.targetElement.addEventListener('click', this.handleClick);
+        this.targetElement.addEventListener('mousedown', this.handleMouseDown);
+        this.targetElement.addEventListener('contextmenu', this.handleContextMenu);
+        this.targetElement.addEventListener('wheel', this.handleWheel, { passive: false });
     }
 
     detach() {
@@ -37,6 +49,9 @@ export class InputState {
         document.removeEventListener('pointerlockchange', this.handlePointerLockChange);
         document.removeEventListener('mousemove', this.handleMouseMove);
         this.targetElement.removeEventListener('click', this.handleClick);
+        this.targetElement.removeEventListener('mousedown', this.handleMouseDown);
+        this.targetElement.removeEventListener('contextmenu', this.handleContextMenu);
+        this.targetElement.removeEventListener('wheel', this.handleWheel);
 
         if (document.pointerLockElement === this.targetElement) {
             document.exitPointerLock();
@@ -69,6 +84,8 @@ export class InputState {
         this.resetMovement();
         this.lookDeltaX = 0;
         this.lookDeltaY = 0;
+        this.primaryActionRequested = false;
+        this.secondaryActionRequested = false;
     }
 
     resetMovement() {
@@ -104,12 +121,69 @@ export class InputState {
         this.clearTransientInput();
     }
 
+    handleMouseDown(event) {
+        if (!this.gameplayEnabled || !this.locked) {
+            return;
+        }
+
+        if (event.button === 0) {
+            this.primaryActionRequested = true;
+            event.preventDefault();
+            return;
+        }
+
+        if (event.button === 2) {
+            this.secondaryActionRequested = true;
+            event.preventDefault();
+        }
+    }
+
+    handleContextMenu(event) {
+        event.preventDefault();
+    }
+
+    handleWheel(event) {
+        if (!this.gameplayEnabled) {
+            return;
+        }
+
+        const direction = Math.sign(event.deltaY || 0);
+        if (direction !== 0) {
+            this.hotbarScrollDelta += direction;
+            event.preventDefault();
+        }
+    }
+
     handleKeyDown(event) {
         if (event.code === 'KeyP') {
             if (!event.repeat) {
                 this.pauseToggleRequested = true;
             }
 
+            event.preventDefault();
+            return;
+        }
+
+        if (event.code === 'KeyE') {
+            if (!event.repeat) {
+                this.inventoryToggleRequested = true;
+            }
+
+            event.preventDefault();
+            return;
+        }
+
+        if (event.code === 'KeyC') {
+            if (!event.repeat) {
+                this.coordsToggleRequested = true;
+            }
+
+            event.preventDefault();
+            return;
+        }
+
+        if (/^Digit[1-9]$/.test(event.code)) {
+            this.hotbarIndexRequested = Number(event.code.replace('Digit', '')) - 1;
             event.preventDefault();
             return;
         }
@@ -137,7 +211,7 @@ export class InputState {
     }
 
     handleKeyUp(event) {
-        if (event.code === 'KeyP') {
+        if (event.code === 'KeyP' || event.code === 'KeyE' || event.code === 'KeyC' || /^Digit[1-9]$/.test(event.code)) {
             return;
         }
 
@@ -168,10 +242,22 @@ export class InputState {
 
     consumeActions() {
         const actions = {
-            togglePause: this.pauseToggleRequested
+            togglePause: this.pauseToggleRequested,
+            toggleCoords: this.coordsToggleRequested,
+            toggleInventory: this.inventoryToggleRequested,
+            primaryAction: this.primaryActionRequested,
+            secondaryAction: this.secondaryActionRequested,
+            hotbarIndex: this.hotbarIndexRequested,
+            hotbarScrollDelta: this.hotbarScrollDelta
         };
 
         this.pauseToggleRequested = false;
+        this.coordsToggleRequested = false;
+        this.inventoryToggleRequested = false;
+        this.primaryActionRequested = false;
+        this.secondaryActionRequested = false;
+        this.hotbarIndexRequested = null;
+        this.hotbarScrollDelta = 0;
         return actions;
     }
 }

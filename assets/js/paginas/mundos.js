@@ -4,6 +4,13 @@
         selectedWorldId: null
     };
 
+    function setGlobalLoadingMessage(message) {
+        const node = document.getElementById('global-loading-message');
+        if (node) {
+            node.textContent = message;
+        }
+    }
+
     function getElements() {
         return {
             list: document.querySelector('[data-world-list]'),
@@ -209,7 +216,28 @@
 
             state.selectedWorldId = payload.data.world.id;
             elements.createForm.reset();
-            window.showSuccess(payload.message || 'Mundo criado com sucesso.');
+            window.loading.show('Pre-gerando chunks iniciais...');
+
+            try {
+                const prebuilderModule = await import(new URL(window.ENV.DOMAIN + '/assets/js/game/services/WorldPrebuilder.js', window.location.origin).toString());
+                const repositoryModule = await import(new URL(window.ENV.DOMAIN + '/assets/js/game/services/WorldRepository.js', window.location.origin).toString());
+                const repository = new repositoryModule.WorldRepository();
+                const prebuilder = new prebuilderModule.WorldPrebuilder({
+                    repository: repository,
+                    worldMeta: payload.data.world,
+                    radius: 2,
+                    batchSize: 8,
+                    onProgress: function (_, message) {
+                        setGlobalLoadingMessage(message);
+                    }
+                });
+
+                await prebuilder.ensureInitialChunkWindow();
+            } finally {
+                window.loading.hide();
+            }
+
+            window.showSuccess('Mundo criado e pre-gerado com sucesso.');
             await loadWorlds({ loadingMessage: 'Atualizando lista de mundos...' });
         } catch (error) {
             window.showError(error.message || 'Falha ao criar o mundo.');

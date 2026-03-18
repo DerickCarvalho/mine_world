@@ -5,16 +5,33 @@ declare(strict_types=1);
 require_once __DIR__ . '/../dependencias/auth/require_auth.php';
 require_once __DIR__ . '/../dependencias/utils.php';
 
-const WORLD_SAVE_SCHEMA_VERSION = 1;
+const WORLD_SAVE_SCHEMA_VERSION = 2;
+const WORLD_INVENTORY_SLOT_COUNT = 27;
+const WORLD_HOTBAR_SLOT_COUNT = 9;
+const WORLD_MAX_STACK_SIZE = 64;
+const WORLD_MAX_MUTATIONS = 8000;
 const WORLD_MIN_X = -2500.0;
 const WORLD_MAX_X = 2499.999;
 const WORLD_MIN_Z = -2500.0;
 const WORLD_MAX_Z = 2499.999;
 const WORLD_MIN_Y = 0.0;
 const WORLD_MAX_Y = 120.0;
+const WORLD_BLOCK_MIN_Y = 0;
+const WORLD_BLOCK_MAX_Y = 99;
 const WORLD_MIN_PITCH = -1.3;
 const WORLD_MAX_PITCH = 1.3;
 const WORLD_TAU = M_PI * 2;
+const WORLD_ALLOWED_BLOCK_IDS = ['air', 'grass', 'dirt', 'stone', 'sand', 'water', 'wood', 'leaves', 'bedrock'];
+const WORLD_INVENTORY_BLOCK_IDS = ['grass', 'dirt', 'stone', 'sand', 'wood', 'leaves'];
+const WORLD_CHUNK_SIZE = 16;
+const WORLD_CHUNK_HEIGHT = 100;
+const WORLD_CHUNK_SCHEMA_VERSION = 1;
+const WORLD_MAX_CHUNK_BATCH = 64;
+const WORLD_CHUNK_DATA_BYTES = WORLD_CHUNK_SIZE * WORLD_CHUNK_SIZE * WORLD_CHUNK_HEIGHT;
+const WORLD_MIN_CHUNK_X = -157;
+const WORLD_MAX_CHUNK_X = 156;
+const WORLD_MIN_CHUNK_Z = -157;
+const WORLD_MAX_CHUNK_Z = 156;
 
 function world_payload(array $world): array
 {
@@ -122,6 +139,11 @@ function world_clamp(float $value, float $min, float $max): float
     return max($min, min($max, $value));
 }
 
+function world_clamp_int(int $value, int $min, int $max): int
+{
+    return max($min, min($max, $value));
+}
+
 function decode_world_state_payload($rawState): ?array
 {
     if (is_array($rawState)) {
@@ -136,14 +158,114 @@ function decode_world_state_payload($rawState): ?array
     return is_array($decoded) ? $decoded : null;
 }
 
+function world_is_allowed_block_id(string $blockId): bool
+{
+    return in_array($blockId, WORLD_ALLOWED_BLOCK_IDS, true);
+}
+
+function world_is_inventory_block_id(string $blockId): bool
+{
+    return in_array($blockId, WORLD_INVENTORY_BLOCK_IDS, true);
+}
+
+function world_normalize_block_id($value, bool $allowAir = true, bool $inventoryOnly = false): ?string
+{
+    if (!is_string($value) || trim($value) === '') {
+        return null;
+    }
+
+    $normalized = strtolower(trim($value));
+    if (!$allowAir && $normalized === 'air') {
+        return null;
+    }
+
+    if ($inventoryOnly) {
+        return world_is_inventory_block_id($normalized) ? $normalized : null;
+    }
+
+    return world_is_allowed_block_id($normalized) ? $normalized : null;
+}
+
+function world_normalize_inventory_slot($slot): ?array
+{
+    if (!is_array($slot)) {
+        return null;
+    }
+
+    $blockId = world_normalize_block_id($slot['block_id'] ?? null, false, true);
+    $quantity = filter_var($slot['quantity'] ?? null, FILTER_VALIDATE_INT);
+
+    if ($blockId === null || $quantity === false || $quantity <= 0) {
+        return null;
+    }
+
+    return [
+        'block_id' => $blockId,
+        'quantity' => world_clamp_int((int) $quantity, 1, WORLD_MAX_STACK_SIZE),
+    ];
+}
+
+function world_normalize_inventory_slots($slots): array
+{
+    $source = is_array($slots) ? array_values($slots) : [];
+    $normalized = [];
+
+    for ($index = 0; $index < WORLD_INVENTORY_SLOT_COUNT; $index += 1) {
+        $normalized[] = world_normalize_inventory_slot($source[$index] ?? null);
+    }
+
+    return $normalized;
+}
+
+function world_normalize_mutations($mutations): ?array
+{
+    if (!is_array($mutations)) {
+        return [];
+    }
+
+    $deduped = [];
+
+    foreach ($mutations as $mutation) {
+        if (!is_array($mutation)) {
+            continue;
+        }
+
+        $x = filter_var($mutation['x'] ?? null, FILTER_VALIDATE_INT);
+        $y = filter_var($mutation['y'] ?? null, FILTER_VALIDATE_INT);
+        $z = filter_var($mutation['z'] ?? null, FILTER_VALIDATE_INT);
+        $blockId = world_normalize_block_id($mutation['block_id'] ?? null, true, false);
+
+        if ($x === false || $y === false || $z === false || $blockId === null) {
+            continue;
+        }
+
+        if ($x < WORLD_MIN_X || $x > WORLD_MAX_X || $z < WORLD_MIN_Z || $z > WORLD_MAX_Z || $y < WORLD_BLOCK_MIN_Y || $y > WORLD_BLOCK_MAX_Y) {
+            continue;
+        }
+
+        $deduped[$x . ':' . $y . ':' . $z] = [
+            'x' => (int) $x,
+            'y' => (int) $y,
+            'z' => (int) $z,
+            'block_id' => $blockId,
+        ];
+    }
+
+    if (count($deduped) > WORLD_MAX_MUTATIONS) {
+        return null;
+    }
+
+    return array_values($deduped);
+}
+
 function normalize_world_save_state(?array $state): ?array
 {
     if ($state === null) {
         return null;
     }
 
-    $schemaVersion = (int) ($state['schema_version'] ?? WORLD_SAVE_SCHEMA_VERSION);
-    if ($schemaVersion !== WORLD_SAVE_SCHEMA_VERSION) {
+    $schemaVersion = (int) ($state['schema_version'] ?? 1);
+    if ($schemaVersion !== 1 && $schemaVersion !== WORLD_SAVE_SCHEMA_VERSION) {
         return null;
     }
 
@@ -173,10 +295,14 @@ function normalize_world_save_state(?array $state): ?array
         return null;
     }
 
+    $selectedHotbarIndex = world_clamp_int((int) ($player['selected_hotbar_index'] ?? 0), 0, WORLD_HOTBAR_SLOT_COUNT - 1);
+    $inventory = isset($state['inventory']) && is_array($state['inventory']) ? $state['inventory'] : [];
     $world = isset($state['world']) && is_array($state['world']) ? $state['world'] : [];
-    $modifiedBlocks = isset($world['modified_blocks']) && is_array($world['modified_blocks'])
-        ? array_values($world['modified_blocks'])
-        : [];
+    $mutations = world_normalize_mutations($world['block_mutations'] ?? $world['modified_blocks'] ?? []);
+
+    if ($mutations === null) {
+        return null;
+    }
 
     return [
         'schema_version' => WORLD_SAVE_SCHEMA_VERSION,
@@ -190,9 +316,13 @@ function normalize_world_save_state(?array $state): ?array
                 'yaw' => round(world_normalize_angle($yaw), 6),
                 'pitch' => round(world_clamp($pitch, WORLD_MIN_PITCH, WORLD_MAX_PITCH), 6),
             ],
+            'selected_hotbar_index' => $selectedHotbarIndex,
+        ],
+        'inventory' => [
+            'slots' => world_normalize_inventory_slots($inventory['slots'] ?? []),
         ],
         'world' => [
-            'modified_blocks' => $modifiedBlocks,
+            'block_mutations' => $mutations,
         ],
     ];
 }
@@ -203,7 +333,7 @@ function build_world_state_payload_from_row(array $row): ?array
 
     if ($decoded === null) {
         $decoded = [
-            'schema_version' => (int) ($row['schema_version'] ?? WORLD_SAVE_SCHEMA_VERSION),
+            'schema_version' => (int) ($row['schema_version'] ?? 1),
             'player' => [
                 'position' => [
                     'x' => (float) ($row['player_x'] ?? 0),
@@ -216,7 +346,7 @@ function build_world_state_payload_from_row(array $row): ?array
                 ],
             ],
             'world' => [
-                'modified_blocks' => [],
+                'block_mutations' => [],
             ],
         ];
     }
@@ -301,4 +431,190 @@ function save_world_state(funcoesPDO $service, int $worldId, array $state): arra
 
     $normalizedState['saved_at'] = date('Y-m-d H:i:s');
     return $normalizedState;
+}
+
+function world_chunk_key(int $chunkX, int $chunkZ): string
+{
+    return $chunkX . ':' . $chunkZ;
+}
+
+function world_is_valid_chunk_coord(int $chunkX, int $chunkZ): bool
+{
+    if ($chunkX < WORLD_MIN_CHUNK_X || $chunkX > WORLD_MAX_CHUNK_X || $chunkZ < WORLD_MIN_CHUNK_Z || $chunkZ > WORLD_MAX_CHUNK_Z) {
+        return false;
+    }
+
+    $startX = $chunkX * WORLD_CHUNK_SIZE;
+    $endX = $startX + WORLD_CHUNK_SIZE - 1;
+    $startZ = $chunkZ * WORLD_CHUNK_SIZE;
+    $endZ = $startZ + WORLD_CHUNK_SIZE - 1;
+
+    return $endX >= (int) WORLD_MIN_X
+        && $startX <= (int) WORLD_MAX_X
+        && $endZ >= (int) WORLD_MIN_Z
+        && $startZ <= (int) WORLD_MAX_Z;
+}
+
+function world_normalize_chunk_requests($chunks): array
+{
+    if (!is_array($chunks)) {
+        return [];
+    }
+
+    $deduped = [];
+
+    foreach ($chunks as $chunk) {
+        if (!is_array($chunk)) {
+            continue;
+        }
+
+        $chunkX = filter_var($chunk['chunk_x'] ?? null, FILTER_VALIDATE_INT);
+        $chunkZ = filter_var($chunk['chunk_z'] ?? null, FILTER_VALIDATE_INT);
+
+        if ($chunkX === false || $chunkZ === false) {
+            continue;
+        }
+
+        $chunkX = (int) $chunkX;
+        $chunkZ = (int) $chunkZ;
+
+        if (!world_is_valid_chunk_coord($chunkX, $chunkZ)) {
+            continue;
+        }
+
+        $deduped[world_chunk_key($chunkX, $chunkZ)] = [
+            'chunk_x' => $chunkX,
+            'chunk_z' => $chunkZ,
+        ];
+    }
+
+    if (count($deduped) > WORLD_MAX_CHUNK_BATCH) {
+        respond_error('O lote de chunks excede o limite permitido nesta fase.', 422);
+    }
+
+    return array_values($deduped);
+}
+
+function world_normalize_chunk_payloads($chunks): array
+{
+    if (!is_array($chunks)) {
+        return [];
+    }
+
+    $normalized = [];
+
+    foreach ($chunks as $chunk) {
+        if (!is_array($chunk)) {
+            continue;
+        }
+
+        $requests = world_normalize_chunk_requests([[
+            'chunk_x' => $chunk['chunk_x'] ?? null,
+            'chunk_z' => $chunk['chunk_z'] ?? null,
+        ]]);
+
+        if (count($requests) !== 1) {
+            continue;
+        }
+
+        $base64 = trim((string) ($chunk['data_base64'] ?? ''));
+        if ($base64 === '') {
+            continue;
+        }
+
+        $decoded = base64_decode($base64, true);
+        if (!is_string($decoded) || strlen($decoded) !== WORLD_CHUNK_DATA_BYTES) {
+            continue;
+        }
+
+        $normalized[world_chunk_key($requests[0]['chunk_x'], $requests[0]['chunk_z'])] = [
+            'chunk_x' => $requests[0]['chunk_x'],
+            'chunk_z' => $requests[0]['chunk_z'],
+            'schema_version' => WORLD_CHUNK_SCHEMA_VERSION,
+            'data_base64' => base64_encode($decoded),
+        ];
+    }
+
+    if (count($normalized) > WORLD_MAX_CHUNK_BATCH) {
+        respond_error('O lote de chunks excede o limite permitido nesta fase.', 422);
+    }
+
+    return array_values($normalized);
+}
+
+function world_count_cached_chunks_by_world_id(funcoesPDO $service, int $worldId): int
+{
+    $row = $service->selectOne(
+        'SELECT COUNT(*) AS total
+         FROM mundos_chunks
+         WHERE mundo_id = :mundo_id',
+        [':mundo_id' => $worldId]
+    );
+
+    return (int) ($row['total'] ?? 0);
+}
+
+function load_world_chunks_by_world_id_and_coords(funcoesPDO $service, int $worldId, array $chunks): array
+{
+    $requested = world_normalize_chunk_requests($chunks);
+    if ($requested === []) {
+        return [];
+    }
+
+    $conditions = [];
+    $params = [':mundo_id' => $worldId];
+
+    foreach ($requested as $index => $chunk) {
+        $conditions[] = '(chunk_x = :chunk_x_' . $index . ' AND chunk_z = :chunk_z_' . $index . ')';
+        $params[':chunk_x_' . $index] = $chunk['chunk_x'];
+        $params[':chunk_z_' . $index] = $chunk['chunk_z'];
+    }
+
+    return $service->select(
+        'SELECT chunk_x, chunk_z, schema_version, data_base64, atualizado_em
+         FROM mundos_chunks
+         WHERE mundo_id = :mundo_id
+           AND (' . implode(' OR ', $conditions) . ')
+         ORDER BY chunk_x ASC, chunk_z ASC',
+        $params
+    );
+}
+
+function save_world_chunks(funcoesPDO $service, int $worldId, array $chunks): array
+{
+    $normalizedChunks = world_normalize_chunk_payloads($chunks);
+    if ($normalizedChunks === []) {
+        return [
+            'saved_count' => 0,
+            'cached_chunks_count' => world_count_cached_chunks_by_world_id($service, $worldId),
+        ];
+    }
+
+    $service->transaction(function (PDO $db) use ($worldId, $normalizedChunks): void {
+        $statement = $db->prepare(
+            'INSERT INTO mundos_chunks
+                (mundo_id, chunk_x, chunk_z, schema_version, data_base64, criado_em, atualizado_em)
+             VALUES
+                (:mundo_id, :chunk_x, :chunk_z, :schema_version, :data_base64, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+             ON DUPLICATE KEY UPDATE
+                schema_version = VALUES(schema_version),
+                data_base64 = VALUES(data_base64),
+                atualizado_em = CURRENT_TIMESTAMP'
+        );
+
+        foreach ($normalizedChunks as $chunk) {
+            $statement->execute([
+                ':mundo_id' => $worldId,
+                ':chunk_x' => $chunk['chunk_x'],
+                ':chunk_z' => $chunk['chunk_z'],
+                ':schema_version' => $chunk['schema_version'],
+                ':data_base64' => $chunk['data_base64'],
+            ]);
+        }
+    });
+
+    return [
+        'saved_count' => count($normalizedChunks),
+        'cached_chunks_count' => world_count_cached_chunks_by_world_id($service, $worldId),
+    ];
 }

@@ -7,7 +7,7 @@ const DEFAULT_PITCH = -0.12;
 
 export class PlayerController {
     constructor(options) {
-        this.terrain = options.terrain;
+        this.world = options.world;
         this.canvas = options.canvas;
         this.config = normalizeRuntimeConfig(options.config);
         this.position = {
@@ -21,7 +21,7 @@ export class PlayerController {
         this.pitch = DEFAULT_PITCH;
         this.grounded = true;
         this.input = new InputState(this.canvas);
-        this.collision = new CollisionResolver(this.terrain);
+        this.collision = new CollisionResolver(this.world);
         this.onPointerLockChange = null;
 
         this.input.onPointerLockChange = (locked) => {
@@ -55,6 +55,10 @@ export class PlayerController {
 
     resetTransientInput() {
         this.input.clearTransientInput();
+    }
+
+    applyConfig(config) {
+        this.config = normalizeRuntimeConfig(Object.assign({}, this.config, config || {}));
     }
 
     consumeInputActions() {
@@ -103,23 +107,19 @@ export class PlayerController {
         this.position.x = horizontal.x;
         this.position.z = horizontal.z;
 
-        const nextY = this.position.y + this.velocityY * deltaTime;
-        const supportHeight = horizontal.supportHeight;
+        const vertical = this.collision.resolveVertical(this.position, this.position.y + this.velocityY * deltaTime);
+        this.position.y = vertical.y;
+        this.grounded = vertical.grounded;
 
-        if (nextY <= supportHeight) {
-            this.position.y = supportHeight;
+        if (this.grounded || vertical.hitCeiling) {
             this.velocityY = 0;
-            this.grounded = true;
-        } else {
-            this.position.y = nextY;
-            this.grounded = false;
         }
     }
 
     applyPose(pose) {
         const nextX = Number.isFinite(Number(pose.x)) ? Number(pose.x) : 0.5;
         const nextZ = Number.isFinite(Number(pose.z)) ? Number(pose.z) : 0.5;
-        const supportHeight = this.collision.getSupportHeight(nextX, nextZ);
+        const supportHeight = this.collision.getSupportHeight(nextX, nextZ, Number.isFinite(Number(pose.y)) ? Number(pose.y) : WORLD_CONFIG.height);
         const requestedY = Number.isFinite(Number(pose.y)) ? Number(pose.y) : supportHeight;
 
         this.position.x = nextX;
@@ -130,7 +130,7 @@ export class PlayerController {
         this.velocity.x = 0;
         this.velocity.z = 0;
         this.velocityY = 0;
-        this.grounded = this.position.y <= supportHeight;
+        this.grounded = this.position.y <= supportHeight + 0.0001;
     }
 
     isPointerLocked() {
@@ -142,6 +142,13 @@ export class PlayerController {
             x: this.position.x,
             y: this.position.y,
             z: this.position.z
+        };
+    }
+
+    getMovementState() {
+        return {
+            speed: Math.hypot(this.velocity.x, this.velocity.z),
+            grounded: this.grounded
         };
     }
 
@@ -157,22 +164,29 @@ export class PlayerController {
         };
     }
 
-    getSaveState() {
+    getBodyAabb(footYOverride) {
+        const footY = Number.isFinite(Number(footYOverride)) ? Number(footYOverride) : this.position.y;
+
         return {
-            schema_version: 1,
-            player: {
-                position: {
-                    x: Number(this.position.x.toFixed(3)),
-                    y: Number(this.position.y.toFixed(3)),
-                    z: Number(this.position.z.toFixed(3))
-                },
-                rotation: {
-                    yaw: Number(this.yaw.toFixed(6)),
-                    pitch: Number(this.pitch.toFixed(6))
-                }
+            minX: this.position.x - WORLD_CONFIG.playerRadius,
+            maxX: this.position.x + WORLD_CONFIG.playerRadius,
+            minY: footY,
+            maxY: footY + WORLD_CONFIG.playerHeight,
+            minZ: this.position.z - WORLD_CONFIG.playerRadius,
+            maxZ: this.position.z + WORLD_CONFIG.playerRadius
+        };
+    }
+
+    getSavePose() {
+        return {
+            position: {
+                x: Number(this.position.x.toFixed(3)),
+                y: Number(this.position.y.toFixed(3)),
+                z: Number(this.position.z.toFixed(3))
             },
-            world: {
-                modified_blocks: []
+            rotation: {
+                yaw: Number(this.yaw.toFixed(6)),
+                pitch: Number(this.pitch.toFixed(6))
             }
         };
     }

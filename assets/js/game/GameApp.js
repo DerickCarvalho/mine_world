@@ -4,7 +4,13 @@ import { ChunkManager } from './world/ChunkManager.js';
 import { ChunkMesher } from './world/ChunkMesher.js';
 import { ChunkStore } from './world/ChunkStore.js';
 import { TerrainGenerator } from './world/TerrainGenerator.js';
+import { MutableWorld } from './world/MutableWorld.js';
+import { RaycastPicker } from './world/RaycastPicker.js';
+import { getBlockIdByKey, getBlockKeyById, getBlockMaxStack, getBlockName, isPlaceableBlock } from './world/BlockTypes.js';
 import { normalizeRuntimeConfig } from './world/WorldConfig.js';
+import { Hotbar } from './ui/Hotbar.js';
+import { InventoryPanel } from './ui/InventoryPanel.js';
+import { FirstPersonHand } from './ui/FirstPersonHand.js';
 
 const SESSION_STATES = Object.freeze({
     BOOTING: 'booting',
@@ -14,7 +20,40 @@ const SESSION_STATES = Object.freeze({
     DESTROYED: 'destroyed'
 });
 
-const POINTER_LOCK_HINT = 'Clique na cena para capturar o mouse. Use WASD para andar, espaco para pular, P para pausar e ESC para liberar o cursor.';
+const POINTER_LOCK_HINT = 'Clique na cena para capturar o mouse. Use WASD para andar, espaco para pular, C para coordenadas, E para inventario e P para pausa.';
+const INVENTORY_HINT = 'Inventario aberto. Clique para reorganizar os slots, use E para fechar e clique na cena para retomar o mouse.';
+const INITIAL_CHUNK_TARGET = 12;
+const INVENTORY_SLOT_COUNT = 27;
+
+function createEmptyInventorySlots() {
+    return new Array(INVENTORY_SLOT_COUNT).fill(null);
+}
+
+function cloneInventorySlots(slots) {
+    return slots.map(function (slot) {
+        return slot ? { block_id: slot.block_id, quantity: slot.quantity } : null;
+    });
+}
+
+function normalizeInventorySlots(slots) {
+    const source = Array.isArray(slots) ? slots : [];
+    const normalized = createEmptyInventorySlots();
+
+    for (let index = 0; index < INVENTORY_SLOT_COUNT; index += 1) {
+        const slot = source[index];
+        const blockId = slot ? getBlockIdByKey(slot.block_id) : 0;
+        const quantity = slot ? Math.floor(Number(slot.quantity || 0)) : 0;
+
+        if (isPlaceableBlock(blockId) && Number.isFinite(quantity) && quantity > 0) {
+            normalized[index] = {
+                block_id: getBlockKeyById(blockId),
+                quantity: Math.max(1, Math.min(getBlockMaxStack(blockId), quantity))
+            };
+        }
+    }
+
+    return normalized;
+}
 
 export class GameApp {
     constructor(options) {
@@ -27,11 +66,27 @@ export class GameApp {
         this.pauseMenu = options.pauseMenu;
         this.repository = options.repository;
         this.initialSaveState = options.saveState || null;
+        this.chunkStats = options.chunkStats || { cached_chunks_count: 0 };
         this.running = false;
         this.sessionState = SESSION_STATES.BOOTING;
         this.frameHandle = null;
         this.lastFrameTime = 0;
         this.hudElapsed = 0;
+        this.currentTarget = null;
+        this.inventoryOpen = false;
+        this.inventorySelectedSlotIndex = null;
+        this.coordsVisible = false;
+        this.chunkLoadInFlight = null;
+        this.chunkSaveInFlight = null;
+        this.cachedChunkCount = Number(this.chunkStats.cached_chunks_count || 0);
+        this.inventorySlots = normalizeInventorySlots(this.initialSaveState && this.initialSaveState.inventory ? this.initialSaveState.inventory.slots : []);
+        this.selectedHotbarIndex = Math.max(0, Math.min(8, Math.floor(Number(this.initialSaveState && this.initialSaveState.player ? this.initialSaveState.player.selected_hotbar_index || 0 : 0))));
+        this.uiDirty = true;
+
+        this.hotbar = new Hotbar(this.root.querySelector('[data-game-hotbar]'));
+        this.inventoryPanel = new InventoryPanel(this.root.querySelector('[data-game-inventory]'));
+        this.hand = new FirstPersonHand(this.root.querySelector('[data-game-hand]'));
+
         this.handleResize = this.handleResize.bind(this);
         this.handleVisibilityChange = this.handleVisibilityChange.bind(this);
         this.loop = this.loop.bind(this);
@@ -42,39 +97,33 @@ export class GameApp {
             throw new Error('A pagina do jogo nao encontrou o canvas principal para iniciar a cena.');
         }
 
-        this.overlay.setWorldName(this.worldMeta.nome || 'Mundo');
-        this.overlay.setStatus('Gerando chunks iniciais...');
-        this.overlay.setChunkCount(0);
+        this.overlay.setStatus('Carregando mundo...');
+        this.overlay.setTarget('Nenhum');
+        this.overlay.setCoordsVisible(this.coordsVisible);
 
         this.renderer = new SoftwareRenderer(this.canvas);
         this.terrain = new TerrainGenerator(this.worldMeta.seed, this.worldMeta.algorithm_version);
+        this.world = new MutableWorld(this.terrain);
+        this.world.applySerializedMutations(this.initialSaveState && this.initialSaveState.world ? this.initialSaveState.world.block_mutations : []);
+        this.raycast = new RaycastPicker(this.world);
         this.chunkStore = new ChunkStore();
-        this.chunkMesher = new ChunkMesher(this.terrain);
+        this.chunkMesher = new ChunkMesher(this.world);
         this.chunkManager = new ChunkManager({
             store: this.chunkStore,
             mesher: this.chunkMesher,
+            world: this.world,
             renderDistance: this.userConfig.render_distance
         });
 
         const spawnPose = this.resolveSpawnPose(this.initialSaveState);
         this.player = new PlayerController({
-            terrain: this.terrain,
+            world: this.world,
             canvas: this.canvas,
             config: this.userConfig,
             spawn: spawnPose
         });
 
-        if (this.pauseMenu) {
-            this.pauseMenu.onResume = () => {
-                this.resume(true);
-            };
-
-            this.pauseMenu.onSaveAndExit = () => {
-                void this.saveAndExit();
-            };
-
-            this.pauseMenu.hide();
-        }
+        this.configureUi();
 
         this.player.onPointerLockChange = (locked) => {
             this.handlePointerLockChange(locked);
@@ -82,14 +131,17 @@ export class GameApp {
 
         this.player.attach();
         this.player.setGameplayEnabled(true);
-        this.chunkManager.primeInitialChunks(spawnPose, 10);
+
+        await this.prepareInitialChunks(spawnPose);
+
         this.overlay.setCoords(this.player.getFeetPosition());
-        this.overlay.setChunkCount(this.chunkManager.getLoadedChunkCount());
         this.overlay.hideBlocking();
         this.overlay.showInstruction(POINTER_LOCK_HINT);
         this.overlay.setStatus('Clique na cena para capturar o mouse.');
         this.crosshair.hide();
-        this.renderer.render(this.player.getCameraState(), this.chunkManager.getRenderableChunks());
+        this.crosshair.setTargetActive(false);
+        this.renderUi();
+        this.renderer.render(this.player.getCameraState(), this.chunkManager.getRenderableChunks(), null);
 
         window.addEventListener('resize', this.handleResize);
         document.addEventListener('visibilitychange', this.handleVisibilityChange);
@@ -100,8 +152,38 @@ export class GameApp {
         this.frameHandle = window.requestAnimationFrame(this.loop);
     }
 
+    configureUi() {
+        if (this.pauseMenu) {
+            this.pauseMenu.onResume = () => {
+                this.resume(true);
+            };
+
+            this.pauseMenu.onSaveAndExit = () => {
+                void this.saveAndExit();
+            };
+
+            this.pauseMenu.onApplySettings = (config) => this.applySettingsFromPause(config);
+            this.pauseMenu.setConfig(this.userConfig);
+            this.pauseMenu.hide();
+        }
+
+        if (this.hotbar) {
+            this.hotbar.onSelect = (index) => {
+                this.setSelectedHotbarIndex(index);
+            };
+        }
+
+        if (this.inventoryPanel) {
+            this.inventoryPanel.onSlotClick = (index) => {
+                this.handleInventorySlotClick(index);
+            };
+
+            this.inventoryPanel.hide();
+        }
+    }
+
     resolveSpawnPose(saveState) {
-        const proceduralSpawn = this.terrain.findSpawnPoint();
+        const proceduralSpawn = this.world.findSpawnPoint();
         const fallbackPose = {
             x: proceduralSpawn.x,
             y: proceduralSpawn.y,
@@ -126,11 +208,11 @@ export class GameApp {
             return fallbackPose;
         }
 
-        if (!this.terrain.isInsideWorld(x, z)) {
+        if (!this.world.isInsideWorld(x, z)) {
             return fallbackPose;
         }
 
-        const supportHeight = this.terrain.getSurfaceHeightAt(x, z);
+        const supportHeight = this.world.getTopSolidYAt(x, z) + 1;
 
         return {
             x: x,
@@ -141,6 +223,152 @@ export class GameApp {
         };
     }
 
+    async prepareInitialChunks(spawnPose) {
+        this.overlay.showLoading('Preparando terreno', 'Carregando a janela inicial de chunks do mundo.');
+        this.chunkManager.update(spawnPose, true);
+
+        let guard = 0;
+        while (this.chunkManager.getLoadedChunkCount() < INITIAL_CHUNK_TARGET && this.chunkManager.getPendingCount() > 0 && guard < 24) {
+            await this.loadNextChunkBatch(10);
+            const result = this.chunkManager.drainQueue(8);
+
+            if (result.processed === 0 && this.chunkManager.getPendingCount() === 0) {
+                break;
+            }
+
+            await this.flushPendingChunkSaves(true);
+            guard += 1;
+        }
+
+        this.overlay.setStatus('Chunks iniciais prontas.');
+    }
+
+    async loadNextChunkBatch(maxBatchSize = 8) {
+        if (!this.repository) {
+            return false;
+        }
+
+        if (this.chunkLoadInFlight) {
+            await this.chunkLoadInFlight;
+            return true;
+        }
+
+        const batch = this.chunkManager.takeLoadBatch(maxBatchSize);
+        if (batch.length === 0) {
+            return false;
+        }
+
+        this.chunkLoadInFlight = this.repository.loadChunkBatch(this.worldMeta.id, batch)
+            .then((loadedMap) => {
+                this.chunkManager.resolveLoadBatch(batch, loadedMap);
+            })
+            .catch(() => {
+                this.chunkManager.resolveLoadBatch(batch, new Map());
+            })
+            .finally(() => {
+                this.chunkLoadInFlight = null;
+            });
+
+        await this.chunkLoadInFlight;
+        return true;
+    }
+
+    async flushPendingChunkSaves(forceWait) {
+        if (!this.repository) {
+            return false;
+        }
+
+        if (this.chunkSaveInFlight) {
+            if (forceWait) {
+                await this.chunkSaveInFlight;
+            }
+
+            return true;
+        }
+
+        const batch = this.chunkManager.takeSaveBatch(forceWait ? 12 : 4);
+        if (batch.length === 0) {
+            return false;
+        }
+
+        this.chunkSaveInFlight = this.repository.saveChunks(this.worldMeta.id, batch)
+            .then((result) => {
+                if (Number.isFinite(Number(result.cachedChunksCount))) {
+                    this.cachedChunkCount = Number(result.cachedChunksCount);
+                }
+            })
+            .catch((error) => {
+                this.chunkManager.requeueSaveBatch(batch);
+
+                if (forceWait) {
+                    throw error;
+                }
+            })
+            .finally(() => {
+                this.chunkSaveInFlight = null;
+            });
+
+        if (forceWait) {
+            await this.chunkSaveInFlight;
+        }
+
+        return true;
+    }
+
+    applyRuntimeConfig(config) {
+        this.userConfig = normalizeRuntimeConfig(config);
+
+        if (this.player) {
+            this.player.applyConfig(this.userConfig);
+        }
+
+        if (this.chunkManager) {
+            this.chunkManager.setRenderDistance(this.userConfig.render_distance);
+
+            if (this.player) {
+                this.chunkManager.update(this.player.getFeetPosition(), true);
+                void this.loadNextChunkBatch(10);
+            }
+        }
+
+        if (this.pauseMenu) {
+            this.pauseMenu.setConfig(this.userConfig);
+        }
+    }
+
+    async applySettingsFromPause(config) {
+        const appliedConfig = await this.repository.saveUserConfig(config);
+        this.applyRuntimeConfig(appliedConfig);
+        return appliedConfig;
+    }
+
+    renderUi() {
+        if (this.hotbar) {
+            this.hotbar.render(this.inventorySlots, this.selectedHotbarIndex);
+        }
+
+        if (this.inventoryPanel) {
+            this.inventoryPanel.render(this.inventorySlots, this.inventorySelectedSlotIndex, this.selectedHotbarIndex);
+        }
+
+        this.uiDirty = false;
+    }
+
+    updatePauseMenuData() {
+        if (!this.pauseMenu || !this.player) {
+            return;
+        }
+
+        this.pauseMenu.setWorldData({
+            name: this.worldMeta.nome || 'Mundo',
+            seed: this.worldMeta.seed || '-',
+            algorithmVersion: this.worldMeta.algorithm_version || 'v1',
+            loadedChunks: this.chunkManager ? this.chunkManager.getLoadedChunkCount() : 0,
+            cachedChunks: this.cachedChunkCount,
+            position: this.player.getFeetPosition()
+        });
+    }
+
     handlePointerLockChange(locked) {
         if (!this.overlay || !this.crosshair) {
             return;
@@ -148,13 +376,22 @@ export class GameApp {
 
         if (this.sessionState !== SESSION_STATES.RUNNING) {
             this.crosshair.hide();
+            this.crosshair.setTargetActive(false);
             this.overlay.hideInstruction();
+            return;
+        }
+
+        if (this.inventoryOpen) {
+            this.crosshair.hide();
+            this.crosshair.setTargetActive(false);
+            this.overlay.showInstruction(INVENTORY_HINT);
+            this.overlay.setStatus('Inventario aberto.');
             return;
         }
 
         if (locked) {
             this.overlay.hideInstruction();
-            this.overlay.setStatus('Explorando o terreno procedural.');
+            this.overlay.setStatus('Explorando o terreno.');
             this.crosshair.show();
             return;
         }
@@ -162,6 +399,7 @@ export class GameApp {
         this.overlay.showInstruction(POINTER_LOCK_HINT);
         this.overlay.setStatus('Clique na cena para capturar o mouse.');
         this.crosshair.hide();
+        this.crosshair.setTargetActive(false);
     }
 
     getChunkDrainBudget(deltaTime) {
@@ -176,42 +414,225 @@ export class GameApp {
         return 2;
     }
 
-    loop(timestamp) {
-        if (!this.running) {
+    setSelectedHotbarIndex(index) {
+        const normalized = Math.max(0, Math.min(8, Math.floor(Number(index || 0))));
+        if (normalized === this.selectedHotbarIndex) {
             return;
         }
 
-        const deltaTime = Math.min(0.033, Math.max(0.001, (timestamp - this.lastFrameTime) / 1000));
-        this.lastFrameTime = timestamp;
+        this.selectedHotbarIndex = normalized;
+        this.uiDirty = true;
+    }
 
-        const actions = this.player ? this.player.consumeInputActions() : { togglePause: false };
+    shiftHotbarSelection(delta) {
+        if (!delta) {
+            return;
+        }
 
-        if (actions.togglePause) {
-            if (this.sessionState === SESSION_STATES.RUNNING) {
-                this.pause();
-            } else if (this.sessionState === SESSION_STATES.PAUSED) {
-                this.resume(false);
+        let nextIndex = this.selectedHotbarIndex;
+        const steps = Math.abs(delta);
+
+        for (let index = 0; index < steps; index += 1) {
+            if (delta > 0) {
+                nextIndex = (nextIndex + 1) % 9;
+            } else {
+                nextIndex = (nextIndex + 8) % 9;
             }
         }
 
-        if (this.sessionState === SESSION_STATES.RUNNING) {
-            this.hudElapsed += deltaTime;
-            this.player.update(deltaTime);
+        this.setSelectedHotbarIndex(nextIndex);
+    }
 
-            const feetPosition = this.player.getFeetPosition();
-            const chunkWindowChanged = this.chunkManager.update(feetPosition);
-            const generatedChunks = this.chunkManager.drainQueue(this.getChunkDrainBudget(deltaTime));
+    toggleCoords() {
+        this.coordsVisible = !this.coordsVisible;
+        this.overlay.setCoordsVisible(this.coordsVisible);
 
-            this.renderer.render(this.player.getCameraState(), this.chunkManager.getRenderableChunks());
+        if (this.coordsVisible && this.player) {
+            this.overlay.setCoords(this.player.getFeetPosition());
+        }
+    }
 
-            if (this.hudElapsed >= 0.12 || chunkWindowChanged || generatedChunks > 0) {
-                this.overlay.setCoords(feetPosition);
-                this.overlay.setChunkCount(this.chunkManager.getLoadedChunkCount());
-                this.hudElapsed = 0;
+    toggleInventory() {
+        if (this.sessionState !== SESSION_STATES.RUNNING) {
+            return;
+        }
+
+        if (this.inventoryOpen) {
+            this.inventoryOpen = false;
+            this.inventorySelectedSlotIndex = null;
+            this.inventoryPanel.hide();
+            this.player.setGameplayEnabled(true);
+            this.overlay.showInstruction(POINTER_LOCK_HINT);
+            this.overlay.setStatus('Clique na cena para capturar o mouse.');
+            this.uiDirty = true;
+            return;
+        }
+
+        this.inventoryOpen = true;
+        this.inventorySelectedSlotIndex = null;
+        this.player.setGameplayEnabled(false);
+        this.player.resetTransientInput();
+        this.player.releasePointerLock();
+        this.inventoryPanel.show();
+        this.crosshair.hide();
+        this.crosshair.setTargetActive(false);
+        this.overlay.showInstruction(INVENTORY_HINT);
+        this.overlay.setStatus('Inventario aberto.');
+        this.currentTarget = null;
+        this.uiDirty = true;
+    }
+
+    handleInventorySlotClick(index) {
+        if (!this.inventoryOpen) {
+            return;
+        }
+
+        if (index >= 0 && index < 9) {
+            this.setSelectedHotbarIndex(index);
+        }
+
+        if (this.inventorySelectedSlotIndex === null) {
+            if (this.inventorySlots[index]) {
+                this.inventorySelectedSlotIndex = index;
+                this.uiDirty = true;
+            }
+            return;
+        }
+
+        if (this.inventorySelectedSlotIndex === index) {
+            this.inventorySelectedSlotIndex = null;
+            this.uiDirty = true;
+            return;
+        }
+
+        const previous = this.inventorySlots[this.inventorySelectedSlotIndex];
+        this.inventorySlots[this.inventorySelectedSlotIndex] = this.inventorySlots[index];
+        this.inventorySlots[index] = previous;
+        this.inventorySelectedSlotIndex = null;
+        this.uiDirty = true;
+    }
+
+    addBlockToInventory(blockId) {
+        if (!this.world.canCollectBlock(blockId)) {
+            return false;
+        }
+
+        const blockKey = getBlockKeyById(blockId);
+        const maxStack = getBlockMaxStack(blockId);
+
+        for (let index = 0; index < this.inventorySlots.length; index += 1) {
+            const slot = this.inventorySlots[index];
+            if (slot && slot.block_id === blockKey && slot.quantity < maxStack) {
+                slot.quantity += 1;
+                this.uiDirty = true;
+                return true;
             }
         }
 
-        this.frameHandle = window.requestAnimationFrame(this.loop);
+        for (let index = 0; index < this.inventorySlots.length; index += 1) {
+            if (!this.inventorySlots[index]) {
+                this.inventorySlots[index] = {
+                    block_id: blockKey,
+                    quantity: 1
+                };
+                this.uiDirty = true;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    decrementSelectedSlot() {
+        const slot = this.inventorySlots[this.selectedHotbarIndex];
+        if (!slot) {
+            return;
+        }
+
+        slot.quantity -= 1;
+        if (slot.quantity <= 0) {
+            this.inventorySlots[this.selectedHotbarIndex] = null;
+        }
+
+        this.uiDirty = true;
+    }
+
+    updateTarget() {
+        if (this.sessionState !== SESSION_STATES.RUNNING || this.inventoryOpen) {
+            this.currentTarget = null;
+            this.overlay.setTarget('Nenhum');
+            this.crosshair.setTargetActive(false);
+            return;
+        }
+
+        this.currentTarget = this.raycast.pick(this.player.getCameraState());
+        if (!this.currentTarget) {
+            this.overlay.setTarget('Nenhum');
+            this.crosshair.setTargetActive(false);
+            return;
+        }
+
+        this.overlay.setTarget(getBlockName(this.currentTarget.blockId) + ' | ' + this.currentTarget.distance.toFixed(1) + 'm');
+        this.crosshair.setTargetActive(true);
+    }
+
+    breakTargetBlock() {
+        if (!this.currentTarget || !this.currentTarget.breakable) {
+            return;
+        }
+
+        const removedBlockId = this.world.breakBlockAt(this.currentTarget.block.x, this.currentTarget.block.y, this.currentTarget.block.z);
+        if (removedBlockId === null) {
+            return;
+        }
+
+        this.addBlockToInventory(removedBlockId);
+        this.chunkManager.markBlockDirty(this.currentTarget.block.x, this.currentTarget.block.y, this.currentTarget.block.z);
+        this.hand.triggerUse();
+        this.currentTarget = null;
+    }
+
+    placeSelectedBlock() {
+        if (!this.currentTarget || !this.currentTarget.place) {
+            return;
+        }
+
+        const slot = this.inventorySlots[this.selectedHotbarIndex];
+        if (!slot) {
+            return;
+        }
+
+        const blockId = getBlockIdByKey(slot.block_id);
+        if (!isPlaceableBlock(blockId)) {
+            return;
+        }
+
+        const placeCell = this.currentTarget.place;
+        const placed = this.world.placeBlockAt(placeCell.x, placeCell.y, placeCell.z, blockId, this.player.getBodyAabb());
+
+        if (!placed) {
+            return;
+        }
+
+        this.decrementSelectedSlot();
+        this.chunkManager.markBlockDirty(placeCell.x, placeCell.y, placeCell.z);
+        this.hand.triggerUse();
+        this.currentTarget = null;
+    }
+
+    buildSaveState() {
+        return {
+            schema_version: 2,
+            player: Object.assign({}, this.player.getSavePose(), {
+                selected_hotbar_index: this.selectedHotbarIndex
+            }),
+            inventory: {
+                slots: cloneInventorySlots(this.inventorySlots)
+            },
+            world: {
+                block_mutations: this.world.getSerializedMutations()
+            }
+        };
     }
 
     pause() {
@@ -219,17 +640,25 @@ export class GameApp {
             return;
         }
 
+        if (this.inventoryOpen) {
+            this.inventoryOpen = false;
+            this.inventorySelectedSlotIndex = null;
+            this.inventoryPanel.hide();
+        }
+
         this.sessionState = SESSION_STATES.PAUSED;
         this.player.setGameplayEnabled(false);
         this.player.resetTransientInput();
         this.player.releasePointerLock();
         this.crosshair.hide();
+        this.crosshair.setTargetActive(false);
         this.overlay.hideInstruction();
         this.overlay.setStatus('Jogo pausado.');
+        this.updatePauseMenuData();
 
         if (this.pauseMenu) {
             this.pauseMenu.setSaving(false);
-            this.pauseMenu.show('A partida foi pausada. Retorne ao jogo ou salve e volte ao menu principal.');
+            this.pauseMenu.show('A partida foi pausada. Revise os dados do mundo, ajuste as configuracoes ou salve e volte ao menu principal.');
         }
     }
 
@@ -250,6 +679,7 @@ export class GameApp {
         this.overlay.setStatus('Clique na cena para capturar o mouse.');
         this.overlay.showInstruction(POINTER_LOCK_HINT);
         this.crosshair.hide();
+        this.crosshair.setTargetActive(false);
 
         if (requestPointerLock) {
             this.player.requestPointerLock();
@@ -274,7 +704,31 @@ export class GameApp {
         }
 
         try {
-            await this.repository.saveGameState(this.worldMeta.id, this.player.getSaveState());
+            await this.loadNextChunkBatch(16);
+
+            let settleGuard = 0;
+            while (settleGuard < 8 && this.chunkManager.getPendingCount() > 0) {
+                await this.loadNextChunkBatch(16);
+                const drained = this.chunkManager.drainQueue(16);
+
+                if (drained.processed === 0) {
+                    break;
+                }
+
+                settleGuard += 1;
+            }
+
+            if (this.chunkLoadInFlight) {
+                await this.chunkLoadInFlight;
+            }
+
+            while (await this.flushPendingChunkSaves(true)) {
+                if (this.chunkManager.getPendingSaveCount() === 0) {
+                    break;
+                }
+            }
+
+            await this.repository.saveGameState(this.worldMeta.id, this.buildSaveState());
             this.destroy();
             window.location.href = window.ENV.DOMAIN + '/index.php?page=menu';
         } catch (error) {
@@ -287,13 +741,104 @@ export class GameApp {
         }
     }
 
+    handleRuntimeActions(actions) {
+        if (actions.hotbarIndex !== null && actions.hotbarIndex !== undefined) {
+            this.setSelectedHotbarIndex(actions.hotbarIndex);
+        }
+
+        if (actions.hotbarScrollDelta) {
+            this.shiftHotbarSelection(actions.hotbarScrollDelta);
+        }
+
+        if (actions.toggleCoords) {
+            this.toggleCoords();
+        }
+
+        if (actions.togglePause) {
+            if (this.sessionState === SESSION_STATES.RUNNING) {
+                this.pause();
+            } else if (this.sessionState === SESSION_STATES.PAUSED) {
+                this.resume(false);
+            }
+        }
+
+        if (actions.toggleInventory && this.sessionState === SESSION_STATES.RUNNING) {
+            this.toggleInventory();
+        }
+
+        if (this.sessionState !== SESSION_STATES.RUNNING || this.inventoryOpen) {
+            return;
+        }
+
+        if (actions.primaryAction) {
+            this.breakTargetBlock();
+        }
+
+        if (actions.secondaryAction) {
+            this.placeSelectedBlock();
+        }
+    }
+
+    loop(timestamp) {
+        if (!this.running) {
+            return;
+        }
+
+        const deltaTime = Math.min(0.033, Math.max(0.001, (timestamp - this.lastFrameTime) / 1000));
+        this.lastFrameTime = timestamp;
+
+        const actions = this.player ? this.player.consumeInputActions() : {};
+        this.handleRuntimeActions(actions);
+
+        let chunkWindowChanged = false;
+        let chunkResult = { processed: 0, generated: 0, rebuilt: 0 };
+
+        if (this.sessionState === SESSION_STATES.RUNNING) {
+            if (!this.inventoryOpen) {
+                this.hudElapsed += deltaTime;
+                this.player.update(deltaTime);
+            }
+
+            chunkWindowChanged = this.chunkManager.update(this.player.getFeetPosition(), false);
+            chunkResult = this.chunkManager.drainQueue(this.getChunkDrainBudget(deltaTime));
+
+            if (chunkWindowChanged || this.chunkManager.getPendingCount() > 0) {
+                void this.loadNextChunkBatch(8);
+            }
+
+            if (chunkResult.generated > 0 || chunkResult.rebuilt > 0 || this.chunkManager.getPendingSaveCount() > 0) {
+                void this.flushPendingChunkSaves(false);
+            }
+        }
+
+        const feetPosition = this.player.getFeetPosition();
+        this.updateTarget();
+
+        if (this.uiDirty) {
+            this.renderUi();
+        }
+
+        this.hand.update(deltaTime, this.player.getMovementState(), this.sessionState === SESSION_STATES.RUNNING && !this.inventoryOpen);
+        this.renderer.render(this.player.getCameraState(), this.chunkManager.getRenderableChunks(), this.currentTarget);
+
+        if (this.hudElapsed >= 0.1 || chunkWindowChanged || chunkResult.processed > 0) {
+            if (this.coordsVisible) {
+                this.overlay.setCoords(feetPosition);
+            }
+
+            this.hudElapsed = 0;
+        }
+
+        this.frameHandle = window.requestAnimationFrame(this.loop);
+    }
+
     handleResize() {
         if (this.renderer) {
             this.renderer.resize();
         }
 
         if (this.renderer && this.player) {
-            this.renderer.render(this.player.getCameraState(), this.chunkManager.getRenderableChunks());
+            this.renderer.render(this.player.getCameraState(), this.chunkManager.getRenderableChunks(), this.currentTarget);
         }
     }
 
@@ -329,13 +874,23 @@ export class GameApp {
             this.pauseMenu.hide();
         }
 
+        if (this.inventoryPanel) {
+            this.inventoryPanel.hide();
+        }
+
         if (this.crosshair) {
             this.crosshair.hide();
+            this.crosshair.setTargetActive(false);
+        }
+
+        if (this.hand) {
+            this.hand.hide();
         }
 
         if (this.overlay) {
             this.overlay.hideInstruction();
             this.overlay.setStatus('Cena encerrada.');
+            this.overlay.setTarget('Nenhum');
         }
     }
 }

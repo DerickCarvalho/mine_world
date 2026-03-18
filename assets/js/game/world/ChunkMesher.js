@@ -1,5 +1,6 @@
+import { isOpaqueBlock, BLOCK_TYPES } from './BlockTypes.js';
 import { getFaceMaterial } from './ChunkMaterials.js';
-import { WORLD_CONFIG, isWithinWorldBounds } from './WorldConfig.js';
+import { WORLD_CONFIG } from './WorldConfig.js';
 
 function createFace(vertices, normal, material) {
     const center = vertices.reduce(function (accumulator, vertex) {
@@ -18,7 +19,8 @@ function createFace(vertices, normal, material) {
         normal: normal,
         center: center,
         color: material.color,
-        shade: material.shade
+        shade: material.shade,
+        alpha: material.alpha || 1
     };
 }
 
@@ -51,54 +53,68 @@ function createChunkBounds(startX, startZ, minY, maxY) {
     };
 }
 
+function shouldRenderFace(blockId, neighborId) {
+    if (blockId === BLOCK_TYPES.air) {
+        return false;
+    }
+
+    if (blockId === BLOCK_TYPES.water) {
+        return neighborId !== BLOCK_TYPES.water && !isOpaqueBlock(neighborId);
+    }
+
+    if (blockId === BLOCK_TYPES.leaves) {
+        return neighborId === BLOCK_TYPES.air || neighborId === BLOCK_TYPES.water;
+    }
+
+    return neighborId === BLOCK_TYPES.air || !isOpaqueBlock(neighborId);
+}
+
 export class ChunkMesher {
-    constructor(terrainGenerator) {
-        this.terrain = terrainGenerator;
+    constructor(world) {
+        this.world = world;
     }
 
     generateChunk(chunkX, chunkZ) {
+        const snapshot = this.world.getChunkSnapshot(chunkX, chunkZ);
+        const data = snapshot.data;
         const faces = [];
         const startX = chunkX * WORLD_CONFIG.chunkSize;
         const startZ = chunkZ * WORLD_CONFIG.chunkSize;
         let minY = Number.POSITIVE_INFINITY;
-        let maxY = 0;
+        let maxY = Number.NEGATIVE_INFINITY;
 
-        for (let offsetX = 0; offsetX < WORLD_CONFIG.chunkSize; offsetX += 1) {
-            const worldX = startX + offsetX;
+        for (let localX = 0; localX < WORLD_CONFIG.chunkSize; localX += 1) {
+            const worldX = startX + localX;
             if (worldX < WORLD_CONFIG.minX || worldX > WORLD_CONFIG.maxX) {
                 continue;
             }
 
-            for (let offsetZ = 0; offsetZ < WORLD_CONFIG.chunkSize; offsetZ += 1) {
-                const worldZ = startZ + offsetZ;
+            for (let localZ = 0; localZ < WORLD_CONFIG.chunkSize; localZ += 1) {
+                const worldZ = startZ + localZ;
                 if (worldZ < WORLD_CONFIG.minZ || worldZ > WORLD_CONFIG.maxZ) {
                     continue;
                 }
 
-                const surfaceHeight = this.terrain.getSurfaceHeightAt(worldX, worldZ);
-                if (surfaceHeight <= 0) {
-                    continue;
+                for (let y = 0; y < WORLD_CONFIG.height; y += 1) {
+                    const blockId = data[y * WORLD_CONFIG.chunkSize * WORLD_CONFIG.chunkSize + localZ * WORLD_CONFIG.chunkSize + localX];
+                    if (blockId === BLOCK_TYPES.air) {
+                        continue;
+                    }
+
+                    minY = Math.min(minY, y);
+                    maxY = Math.max(maxY, y + 1);
+
+                    this.pushFace(faces, blockId, worldX, y, worldZ, 'top');
+                    this.pushFace(faces, blockId, worldX, y, worldZ, 'bottom');
+                    this.pushFace(faces, blockId, worldX, y, worldZ, 'north');
+                    this.pushFace(faces, blockId, worldX, y, worldZ, 'south');
+                    this.pushFace(faces, blockId, worldX, y, worldZ, 'east');
+                    this.pushFace(faces, blockId, worldX, y, worldZ, 'west');
                 }
-
-                minY = Math.min(minY, 0);
-                maxY = Math.max(maxY, surfaceHeight);
-
-                const topType = this.terrain.getBlockTypeAt(worldX, surfaceHeight - 1, worldZ);
-                faces.push(createFace([
-                    { x: worldX, y: surfaceHeight, z: worldZ },
-                    { x: worldX + 1, y: surfaceHeight, z: worldZ },
-                    { x: worldX + 1, y: surfaceHeight, z: worldZ + 1 },
-                    { x: worldX, y: surfaceHeight, z: worldZ + 1 }
-                ], { x: 0, y: 1, z: 0 }, getFaceMaterial(topType, 'top')));
-
-                this.pushSideFace(faces, worldX, worldZ, surfaceHeight, worldX + 1, worldZ, 'east');
-                this.pushSideFace(faces, worldX, worldZ, surfaceHeight, worldX - 1, worldZ, 'west');
-                this.pushSideFace(faces, worldX, worldZ, surfaceHeight, worldX, worldZ - 1, 'north');
-                this.pushSideFace(faces, worldX, worldZ, surfaceHeight, worldX, worldZ + 1, 'south');
             }
         }
 
-        const chunkGeometry = createChunkBounds(startX, startZ, minY === Number.POSITIVE_INFINITY ? 0 : minY, maxY);
+        const chunkGeometry = createChunkBounds(startX, startZ, minY === Number.POSITIVE_INFINITY ? 0 : minY, maxY === Number.NEGATIVE_INFINITY ? 0 : maxY);
 
         return {
             key: chunkX + ',' + chunkZ,
@@ -111,63 +127,93 @@ export class ChunkMesher {
         };
     }
 
-    resolveSideBlockType(worldX, worldZ, surfaceHeight, neighborHeight) {
-        if (surfaceHeight - neighborHeight <= 2) {
-            return this.terrain.getBlockTypeAt(worldX, surfaceHeight - 1, worldZ);
-        }
+    pushFace(faces, blockId, worldX, y, worldZ, direction) {
+        const neighbor = this.getNeighbor(worldX, y, worldZ, direction);
 
-        return this.terrain.getBlockTypeAt(worldX, Math.max(0, surfaceHeight - 3), worldZ);
-    }
-
-    pushSideFace(faces, worldX, worldZ, surfaceHeight, neighborX, neighborZ, direction) {
-        const neighborHeight = isWithinWorldBounds(neighborX, neighborZ)
-            ? this.terrain.getSurfaceHeightAt(neighborX, neighborZ)
-            : 0;
-
-        if (surfaceHeight <= neighborHeight) {
+        if (!shouldRenderFace(blockId, neighbor.blockId)) {
             return;
         }
 
-        const baseY = Math.max(0, neighborHeight);
-        const topY = surfaceHeight;
-        const blockType = this.resolveSideBlockType(worldX, worldZ, surfaceHeight, neighborHeight);
-        const material = getFaceMaterial(blockType, direction);
+        const material = getFaceMaterial(blockId, direction);
+        if (direction === 'top') {
+            faces.push(createFace([
+                { x: worldX, y: y + 1, z: worldZ },
+                { x: worldX + 1, y: y + 1, z: worldZ },
+                { x: worldX + 1, y: y + 1, z: worldZ + 1 },
+                { x: worldX, y: y + 1, z: worldZ + 1 }
+            ], { x: 0, y: 1, z: 0 }, material));
+            return;
+        }
+
+        if (direction === 'bottom') {
+            faces.push(createFace([
+                { x: worldX, y: y, z: worldZ + 1 },
+                { x: worldX + 1, y: y, z: worldZ + 1 },
+                { x: worldX + 1, y: y, z: worldZ },
+                { x: worldX, y: y, z: worldZ }
+            ], { x: 0, y: -1, z: 0 }, material));
+            return;
+        }
 
         if (direction === 'east') {
             faces.push(createFace([
-                { x: worldX + 1, y: baseY, z: worldZ },
-                { x: worldX + 1, y: topY, z: worldZ },
-                { x: worldX + 1, y: topY, z: worldZ + 1 },
-                { x: worldX + 1, y: baseY, z: worldZ + 1 }
+                { x: worldX + 1, y: y, z: worldZ },
+                { x: worldX + 1, y: y + 1, z: worldZ },
+                { x: worldX + 1, y: y + 1, z: worldZ + 1 },
+                { x: worldX + 1, y: y, z: worldZ + 1 }
             ], { x: 1, y: 0, z: 0 }, material));
             return;
         }
 
         if (direction === 'west') {
             faces.push(createFace([
-                { x: worldX, y: baseY, z: worldZ + 1 },
-                { x: worldX, y: topY, z: worldZ + 1 },
-                { x: worldX, y: topY, z: worldZ },
-                { x: worldX, y: baseY, z: worldZ }
+                { x: worldX, y: y, z: worldZ + 1 },
+                { x: worldX, y: y + 1, z: worldZ + 1 },
+                { x: worldX, y: y + 1, z: worldZ },
+                { x: worldX, y: y, z: worldZ }
             ], { x: -1, y: 0, z: 0 }, material));
             return;
         }
 
         if (direction === 'north') {
             faces.push(createFace([
-                { x: worldX, y: baseY, z: worldZ },
-                { x: worldX + 1, y: baseY, z: worldZ },
-                { x: worldX + 1, y: topY, z: worldZ },
-                { x: worldX, y: topY, z: worldZ }
+                { x: worldX, y: y, z: worldZ },
+                { x: worldX + 1, y: y, z: worldZ },
+                { x: worldX + 1, y: y + 1, z: worldZ },
+                { x: worldX, y: y + 1, z: worldZ }
             ], { x: 0, y: 0, z: -1 }, material));
             return;
         }
 
         faces.push(createFace([
-            { x: worldX + 1, y: baseY, z: worldZ + 1 },
-            { x: worldX, y: baseY, z: worldZ + 1 },
-            { x: worldX, y: topY, z: worldZ + 1 },
-            { x: worldX + 1, y: topY, z: worldZ + 1 }
+            { x: worldX + 1, y: y, z: worldZ + 1 },
+            { x: worldX, y: y, z: worldZ + 1 },
+            { x: worldX, y: y + 1, z: worldZ + 1 },
+            { x: worldX + 1, y: y + 1, z: worldZ + 1 }
         ], { x: 0, y: 0, z: 1 }, material));
+    }
+
+    getNeighbor(worldX, y, worldZ, direction) {
+        if (direction === 'top') {
+            return { blockId: this.world.getBlockIdAtBlock(worldX, y + 1, worldZ) };
+        }
+
+        if (direction === 'bottom') {
+            return { blockId: this.world.getBlockIdAtBlock(worldX, y - 1, worldZ) };
+        }
+
+        if (direction === 'east') {
+            return { blockId: this.world.getBlockIdAtBlock(worldX + 1, y, worldZ) };
+        }
+
+        if (direction === 'west') {
+            return { blockId: this.world.getBlockIdAtBlock(worldX - 1, y, worldZ) };
+        }
+
+        if (direction === 'north') {
+            return { blockId: this.world.getBlockIdAtBlock(worldX, y, worldZ - 1) };
+        }
+
+        return { blockId: this.world.getBlockIdAtBlock(worldX, y, worldZ + 1) };
     }
 }

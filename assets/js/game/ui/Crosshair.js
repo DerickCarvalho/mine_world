@@ -14,4 +14,12 @@ export class Crosshair {
             this.element.hidden = true;
         }
     }
+
+    setTargetActive(active) {
+        if (!this.element) {
+            return;
+        }
+
+        this.element.dataset.target = active ? 'active' : 'idle';
+    }
 }

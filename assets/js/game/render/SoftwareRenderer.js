@@ -1,13 +1,28 @@
 import { WORLD_CONFIG, clampNumber } from '../world/WorldConfig.js';
 import { createCameraTransform, worldToCameraSpace } from '../core/CameraMath.js';
 
-const FOG_COLOR = { r: 154, g: 208, b: 241 };
-const SKY_TOP = '#7ec7ff';
-const SKY_BOTTOM = '#d0f0ff';
-const HORIZON = '#93d46d';
+const FOG_COLOR = { r: 166, g: 206, b: 228 };
+const SKY_TOP = '#76c7ff';
+const SKY_BOTTOM = '#caecff';
+const HORIZON = '#8bb873';
+const BLOCK_HIGHLIGHT = 'rgba(255, 248, 171, 0.92)';
 
 function mixColor(start, end, amount) {
     return Math.round(start + (end - start) * amount);
+}
+
+function projectPoint(point, transform, renderer) {
+    const cameraPoint = worldToCameraSpace(point, transform);
+    if (cameraPoint.z <= WORLD_CONFIG.nearPlane) {
+        return null;
+    }
+
+    const scale = renderer.focalLength / cameraPoint.z;
+    return {
+        x: renderer.viewportWidth * 0.5 + cameraPoint.x * scale,
+        y: renderer.viewportHeight * 0.5 - cameraPoint.y * scale,
+        depth: cameraPoint.z
+    };
 }
 
 export class SoftwareRenderer {
@@ -40,7 +55,7 @@ export class SoftwareRenderer {
         this.focalLength = width / (2 * Math.tan((WORLD_CONFIG.fov * Math.PI / 180) / 2));
         this.gradient = this.context.createLinearGradient(0, 0, 0, height);
         this.gradient.addColorStop(0, SKY_TOP);
-        this.gradient.addColorStop(0.6, SKY_BOTTOM);
+        this.gradient.addColorStop(0.56, SKY_BOTTOM);
         this.gradient.addColorStop(1, HORIZON);
     }
 
@@ -72,7 +87,7 @@ export class SoftwareRenderer {
             || screenY - projectedRadius > this.viewportHeight + 180);
     }
 
-    render(camera, chunks) {
+    render(camera, chunks, highlight) {
         if (!camera) {
             return;
         }
@@ -133,12 +148,12 @@ export class SoftwareRenderer {
                     continue;
                 }
 
-                const fog = clampNumber((depth - 42) / (WORLD_CONFIG.farPlane - 42), 0, 1);
+                const fog = clampNumber((depth - 30) / (WORLD_CONFIG.farPlane - 26), 0, 1);
                 polygons.push({
                     points: points,
                     depth: depth,
-                    fill: this.buildColor(face.color, face.shade, fog),
-                    stroke: this.buildColor(face.color, face.shade * 0.62, fog)
+                    fill: this.buildColor(face.color, face.shade, fog, face.alpha || 1),
+                    stroke: this.buildColor(face.color, face.shade * 0.64, fog, Math.min(1, (face.alpha || 1) * 0.95))
                 });
             }
         }
@@ -164,17 +179,58 @@ export class SoftwareRenderer {
             this.context.lineWidth = 1;
             this.context.stroke();
         }
+
+        if (highlight && highlight.block) {
+            this.drawBlockOutline(transform, highlight.block);
+        }
     }
 
-    buildColor(color, shade, fogAmount) {
+    drawBlockOutline(transform, block) {
+        const vertices = [
+            { x: block.x, y: block.y, z: block.z },
+            { x: block.x + 1, y: block.y, z: block.z },
+            { x: block.x + 1, y: block.y + 1, z: block.z },
+            { x: block.x, y: block.y + 1, z: block.z },
+            { x: block.x, y: block.y, z: block.z + 1 },
+            { x: block.x + 1, y: block.y, z: block.z + 1 },
+            { x: block.x + 1, y: block.y + 1, z: block.z + 1 },
+            { x: block.x, y: block.y + 1, z: block.z + 1 }
+        ];
+        const projected = vertices.map((vertex) => projectPoint(vertex, transform, this));
+        const edges = [
+            [0, 1], [1, 2], [2, 3], [3, 0],
+            [4, 5], [5, 6], [6, 7], [7, 4],
+            [0, 4], [1, 5], [2, 6], [3, 7]
+        ];
+
+        this.context.strokeStyle = BLOCK_HIGHLIGHT;
+        this.context.lineWidth = 2;
+
+        for (const edge of edges) {
+            const start = projected[edge[0]];
+            const end = projected[edge[1]];
+
+            if (!start || !end) {
+                continue;
+            }
+
+            this.context.beginPath();
+            this.context.moveTo(start.x, start.y);
+            this.context.lineTo(end.x, end.y);
+            this.context.stroke();
+        }
+    }
+
+    buildColor(color, shade, fogAmount, alpha) {
         const litRed = Math.round(color.r * shade);
         const litGreen = Math.round(color.g * shade);
         const litBlue = Math.round(color.b * shade);
 
-        return 'rgb('
+        return 'rgba('
             + mixColor(litRed, FOG_COLOR.r, fogAmount) + ','
             + mixColor(litGreen, FOG_COLOR.g, fogAmount) + ','
-            + mixColor(litBlue, FOG_COLOR.b, fogAmount) + ')';
+            + mixColor(litBlue, FOG_COLOR.b, fogAmount) + ','
+            + alpha + ')';
     }
 
     drawBackground() {
@@ -182,7 +238,7 @@ export class SoftwareRenderer {
         this.context.fillRect(0, 0, this.viewportWidth, this.viewportHeight);
 
         this.context.fillStyle = 'rgba(255, 255, 255, 0.08)';
-        this.context.fillRect(0, this.viewportHeight * 0.62, this.viewportWidth, this.viewportHeight * 0.38);
+        this.context.fillRect(0, this.viewportHeight * 0.64, this.viewportWidth, this.viewportHeight * 0.36);
     }
 
     destroy() {

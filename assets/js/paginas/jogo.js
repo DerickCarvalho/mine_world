@@ -1,5 +1,6 @@
 import { GameApp } from '../game/GameApp.js';
 import { WorldRepository } from '../game/services/WorldRepository.js';
+import { WorldPrebuilder } from '../game/services/WorldPrebuilder.js';
 import { SceneOverlay } from '../game/ui/SceneOverlay.js';
 import { Crosshair } from '../game/ui/Crosshair.js';
 import { PauseMenu } from '../game/ui/PauseMenu.js';
@@ -45,6 +46,18 @@ async function bootstrapGame(root, overlay, crosshair, pauseMenu) {
 
     try {
         const gameContext = await repository.loadGameContext(worldId);
+        const prebuilder = new WorldPrebuilder({
+            repository: repository,
+            worldMeta: gameContext.world,
+            saveState: gameContext.saveState,
+            radius: 2,
+            batchSize: 8,
+            onProgress: function (title, message) {
+                overlay.showLoading(title, message);
+            }
+        });
+        const prebuildResult = await prebuilder.ensureInitialChunkWindow();
+
         destroyActiveGame();
 
         activeGameApp = new GameApp({
@@ -53,6 +66,12 @@ async function bootstrapGame(root, overlay, crosshair, pauseMenu) {
             worldMeta: gameContext.world,
             userConfig: gameContext.config,
             saveState: gameContext.saveState,
+            chunkStats: {
+                cached_chunks_count: Math.max(
+                    Number(gameContext.chunkStats && gameContext.chunkStats.cached_chunks_count || 0),
+                    Number(prebuildResult.cachedChunksCount || 0)
+                )
+            },
             repository: repository,
             overlay: overlay,
             crosshair: crosshair,

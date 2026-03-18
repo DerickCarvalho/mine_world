@@ -7,34 +7,54 @@ $requestedWorldId = (int) (filter_input(INPUT_GET, 'id_mundo', FILTER_VALIDATE_I
 
     <div class="game-hud">
         <div class="game-hud__top">
-            <div class="game-chip">
-                <span>Mundo</span>
-                <strong data-game-world-name>Carregando...</strong>
+            <div class="game-chip game-chip--target">
+                <span>Alvo</span>
+                <strong data-game-target>Nenhum</strong>
             </div>
 
-            <div class="game-chip">
-                <span>Chunks</span>
-                <strong data-game-chunk-count>0</strong>
-            </div>
-
-            <div class="game-chip">
-                <span>Pausa</span>
-                <strong>P para abrir menu</strong>
+            <div class="game-chip game-chip--coords" data-game-coords-chip hidden>
+                <span>Posicao</span>
+                <strong data-game-coords>X 0.0 | Y 0.0 | Z 0.0</strong>
             </div>
         </div>
 
-        <div class="game-hud__bottom">
-            <div class="game-chip game-chip--wide" data-game-status>Preparando mundo procedural...</div>
+        <div class="game-hud__status">
+            <div class="game-chip game-chip--wide" data-game-status>Preparando mundo...</div>
+        </div>
 
-            <div class="game-chip game-chip--wide">
-                <span>Posicao</span>
-                <strong data-game-coords>X 0.0 | Y 0.0 | Z 0.0</strong>
+        <div class="game-hud__bottom">
+            <div class="game-hotbar-wrap">
+                <div class="game-hand" data-game-hand hidden aria-hidden="true">
+                    <div class="game-hand__sleeve"></div>
+                    <div class="game-hand__forearm"></div>
+                    <div class="game-hand__palm"></div>
+                    <div class="game-hand__thumb"></div>
+                </div>
+
+                <div class="game-hotbar" data-game-hotbar aria-label="Hotbar do jogador"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="game-inventory" data-game-inventory hidden>
+        <div class="game-inventory__card">
+            <div class="game-inventory__header">
+                <p class="game-inventory__eyebrow">MineWorld</p>
+                <h2>Inventario simples</h2>
+                <p>Organize os blocos por clique. Os 9 primeiros slots formam a hotbar.</p>
+            </div>
+
+            <div class="game-inventory__grid" data-inventory-grid></div>
+
+            <div class="game-inventory__hint">
+                <span>E</span>
+                <p>Fechar inventario</p>
             </div>
         </div>
     </div>
 
     <div class="game-instruction" data-overlay-instruction hidden>
-        Clique na cena para capturar o mouse. Use WASD para andar, espaco para pular, P para pausar e ESC para liberar o cursor.
+        Clique na cena para capturar o mouse. Use WASD para andar, espaco para pular, C para coordenadas, E para inventario e P para pausar.
     </div>
 
     <div class="game-crosshair" data-crosshair hidden aria-hidden="true">
@@ -44,9 +64,79 @@ $requestedWorldId = (int) (filter_input(INPUT_GET, 'id_mundo', FILTER_VALIDATE_I
 
     <div class="game-pause" data-pause-menu hidden>
         <div class="game-pause__card">
-            <p class="game-pause__eyebrow">MineWorld</p>
-            <h2>Jogo pausado</h2>
-            <p data-pause-message>A partida foi pausada. Retorne ao jogo ou salve e volte ao menu principal.</p>
+            <div class="game-pause__header">
+                <div>
+                    <p class="game-pause__eyebrow">MineWorld</p>
+                    <h2>Jogo pausado</h2>
+                    <p data-pause-message>A partida foi pausada. Revise os dados do mundo, ajuste as configuracoes ou salve e volte ao menu principal.</p>
+                </div>
+            </div>
+
+            <div class="game-pause__body">
+                <section class="game-pause__panel">
+                    <h3>Dados do mundo</h3>
+
+                    <dl class="game-pause__stats">
+                        <div>
+                            <dt>Mundo</dt>
+                            <dd data-pause-world-name>-</dd>
+                        </div>
+                        <div>
+                            <dt>Seed</dt>
+                            <dd data-pause-world-seed>-</dd>
+                        </div>
+                        <div>
+                            <dt>Algoritmo</dt>
+                            <dd data-pause-world-algorithm>-</dd>
+                        </div>
+                        <div>
+                            <dt>Chunks carregadas</dt>
+                            <dd data-pause-loaded-chunks>0</dd>
+                        </div>
+                        <div>
+                            <dt>Chunks em cache</dt>
+                            <dd data-pause-cached-chunks>0</dd>
+                        </div>
+                        <div>
+                            <dt>Posicao atual</dt>
+                            <dd data-pause-player-position>-</dd>
+                        </div>
+                    </dl>
+                </section>
+
+                <section class="game-pause__panel">
+                    <div class="game-pause__panel-header">
+                        <h3>Configuracoes</h3>
+                        <p>Alteracoes aplicadas automaticamente durante a partida.</p>
+                    </div>
+
+                    <form class="game-pause__settings" data-pause-settings-form novalidate>
+                        <label class="field">
+                            <span>Distancia de render</span>
+                            <input type="number" name="render_distance" min="2" max="10" step="1" required>
+                        </label>
+
+                        <label class="field">
+                            <span>Sensibilidade do mouse</span>
+                            <input type="number" name="mouse_sensitivity" min="0.1" max="3" step="0.1" required>
+                        </label>
+
+                        <label class="field">
+                            <span>Volume principal</span>
+                            <input type="number" name="master_volume" min="0" max="100" step="1" required>
+                        </label>
+
+                        <label class="game-pause__toggle">
+                            <span>Inverter eixo Y</span>
+                            <input type="checkbox" name="invert_y" value="1">
+                        </label>
+                    </form>
+
+                    <p class="game-pause__settings-status" data-pause-settings-status data-state="idle">
+                        Configuracoes aplicadas automaticamente.
+                    </p>
+                </section>
+            </div>
 
             <div class="game-pause__actions">
                 <button class="button button--ghost" type="button" data-pause-resume>Retornar ao jogo</button>
@@ -59,8 +149,8 @@ $requestedWorldId = (int) (filter_input(INPUT_GET, 'id_mundo', FILTER_VALIDATE_I
         <div class="game-overlay__card">
             <p class="game-overlay__eyebrow">MineWorld</p>
             <h1 data-overlay-title>Carregando mundo</h1>
-            <p data-overlay-message>Buscando metadados e preparando o terreno procedural inicial.</p>
-            <p class="game-overlay__hint">Primeira versao jogavel: terreno procedural, camera em primeira pessoa, pause com P e retomada do ultimo save.</p>
+            <p data-overlay-message>Buscando metadados, cache inicial de chunks e preparando o terreno.</p>
+            <p class="game-overlay__hint">Nesta fase o mundo usa cache persistente de chunks, coordenadas opcionais por `C` e menu contextual completo por `P`.</p>
 
             <div class="game-overlay__actions">
                 <button class="button button--primary" type="button" data-overlay-action hidden>Voltar ao lobby</button>
