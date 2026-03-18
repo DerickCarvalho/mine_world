@@ -19,9 +19,12 @@ if ($world === null) {
     respond_error('Mundo nao encontrado para a conta autenticada.', 404);
 }
 
+$saveState = load_world_state_by_world_id($service, $worldId);
+
 respond_ok(
     'Mundo carregado com sucesso.',
     [
         'world' => world_payload($world),
+        'save_state' => $saveState,
     ]
 );

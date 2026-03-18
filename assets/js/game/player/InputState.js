@@ -9,6 +9,8 @@ export class InputState {
         this.lookDeltaX = 0;
         this.lookDeltaY = 0;
         this.locked = false;
+        this.gameplayEnabled = true;
+        this.pauseToggleRequested = false;
         this.onPointerLockChange = null;
 
         this.handleClick = this.handleClick.bind(this);
@@ -41,6 +43,34 @@ export class InputState {
         }
     }
 
+    setGameplayEnabled(enabled) {
+        this.gameplayEnabled = Boolean(enabled);
+
+        if (!this.gameplayEnabled) {
+            this.clearTransientInput();
+        }
+    }
+
+    requestPointerLock() {
+        if (!this.gameplayEnabled || document.pointerLockElement === this.targetElement || !this.targetElement.requestPointerLock) {
+            return;
+        }
+
+        this.targetElement.requestPointerLock();
+    }
+
+    releasePointerLock() {
+        if (document.pointerLockElement === this.targetElement) {
+            document.exitPointerLock();
+        }
+    }
+
+    clearTransientInput() {
+        this.resetMovement();
+        this.lookDeltaX = 0;
+        this.lookDeltaY = 0;
+    }
+
     resetMovement() {
         this.forward = false;
         this.backward = false;
@@ -50,15 +80,11 @@ export class InputState {
     }
 
     handleClick() {
-        if (document.pointerLockElement === this.targetElement || !this.targetElement.requestPointerLock) {
-            return;
-        }
-
-        this.targetElement.requestPointerLock();
+        this.requestPointerLock();
     }
 
     handleMouseMove(event) {
-        if (!this.locked) {
+        if (!this.locked || !this.gameplayEnabled) {
             return;
         }
 
@@ -75,12 +101,27 @@ export class InputState {
     }
 
     handleWindowBlur() {
-        this.resetMovement();
-        this.lookDeltaX = 0;
-        this.lookDeltaY = 0;
+        this.clearTransientInput();
     }
 
     handleKeyDown(event) {
+        if (event.code === 'KeyP') {
+            if (!event.repeat) {
+                this.pauseToggleRequested = true;
+            }
+
+            event.preventDefault();
+            return;
+        }
+
+        if (!this.gameplayEnabled) {
+            if (event.code === 'Space') {
+                event.preventDefault();
+            }
+
+            return;
+        }
+
         if (event.code === 'KeyW') {
             this.forward = true;
         } else if (event.code === 'KeyS') {
@@ -96,6 +137,10 @@ export class InputState {
     }
 
     handleKeyUp(event) {
+        if (event.code === 'KeyP') {
+            return;
+        }
+
         if (event.code === 'KeyW') {
             this.forward = false;
         } else if (event.code === 'KeyS') {
@@ -119,5 +164,14 @@ export class InputState {
         this.lookDeltaX = 0;
         this.lookDeltaY = 0;
         return delta;
+    }
+
+    consumeActions() {
+        const actions = {
+            togglePause: this.pauseToggleRequested
+        };
+
+        this.pauseToggleRequested = false;
+        return actions;
     }
 }

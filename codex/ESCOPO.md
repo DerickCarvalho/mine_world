@@ -32,7 +32,8 @@ Quando houver necessidade de persistencia de conta, configuracoes e mundos, a ca
 - PRD-001 implementada: autenticacao, sessao, configuracoes persistentes e catalogo base de mundos.
 - PRD-002 implementada: menu principal `MineWorld`, lobby de mundos, criacao e exclusao definitiva, tela de `Opcoes`.
 - PRD-003 implementada: rota `jogo`, mundo procedural por seed, carga por chunks, HUD minimo e movimento em primeira pessoa.
-- Proxima frente: evoluir o runtime 3D com texturas, interacao com blocos e persistencia de alteracoes do terreno.
+- PRD-004 implementada: locomocao alinhada a camera, controle natural do mouse, pausa com `P`, `Salvar e sair` e retomada no ultimo ponto salvo.
+- Proxima frente: evoluir o runtime 3D com texturas, interacao com blocos e persistencia mais ampla do terreno.
 
 ## Regras de Produto Consolidadas
 
@@ -46,6 +47,11 @@ Quando houver necessidade de persistencia de conta, configuracoes e mundos, a ca
 - O mundo inicial deve ter dimensao logica de `5000 x 5000 x 100` blocos.
 - A versao inicial nao inclui quebrar ou colocar blocos.
 - O jogador deve controlar camera em primeira pessoa com cursor, mouse, `WASD` e `espaco`.
+- O movimento na gameplay deve seguir a orientacao horizontal da camera.
+- O mouse deve controlar a camera com leitura natural por padrao, sem inversao vertical inesperada.
+- A tecla `P` deve abrir o menu de pausa e suspender de fato a gameplay.
+- `Salvar e sair` deve persistir o estado necessario do mundo e do jogador antes de retornar ao menu principal.
+- Ao reabrir um mundo salvo, o jogador deve nascer no ultimo ponto persistido valido.
 - O tamanho do mundo e um alvo logico; o cliente nao deve depender de carregar a area total de uma vez.
 
 ## PRDs Ativas
@@ -55,6 +61,7 @@ Quando houver necessidade de persistencia de conta, configuracoes e mundos, a ca
 | PRD-001 | Sistema de contas e persistencia base | Implementada | - | Cadastro, login, sessao e base para salvar configuracoes e catalogo de mundos por usuario. |
 | PRD-002 | Menus principais e lobby de mundos | Implementada | PRD-001 | Fluxo autenticado com menu `MineWorld`, tela de mundos, criacao de novo mundo e exclusao definitiva com confirmacao. |
 | PRD-003 | Mundo 3D procedural jogavel | Implementada | PRD-001, PRD-002 | Entrada em um mundo procedural 3D com renderer proprio em canvas, camera em primeira pessoa, movimento basico e carregamento sob demanda. |
+| PRD-004 | Refino de gameplay, pausa e persistencia de mundo | Implementada | PRD-003 | Refinar locomocao e camera, reduzir travamentos, adicionar pause menu com `P`, salvar/sair e retomada no ultimo ponto salvo. |
 
 ## Fora do Escopo Atual
 

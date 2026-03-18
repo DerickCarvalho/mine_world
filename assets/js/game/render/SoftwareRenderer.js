@@ -1,4 +1,5 @@
 import { WORLD_CONFIG, clampNumber } from '../world/WorldConfig.js';
+import { createCameraTransform, worldToCameraSpace } from '../core/CameraMath.js';
 
 const FOG_COLOR = { r: 154, g: 208, b: 241 };
 const SKY_TOP = '#7ec7ff';
@@ -43,6 +44,34 @@ export class SoftwareRenderer {
         this.gradient.addColorStop(1, HORIZON);
     }
 
+    isChunkVisible(transform, chunk) {
+        if (!chunk || !chunk.center || !Number.isFinite(chunk.radius)) {
+            return true;
+        }
+
+        const center = worldToCameraSpace(chunk.center, transform);
+        const radius = chunk.radius;
+
+        if (center.z + radius <= WORLD_CONFIG.nearPlane) {
+            return false;
+        }
+
+        if (center.z - radius > WORLD_CONFIG.farPlane) {
+            return false;
+        }
+
+        const safeDepth = Math.max(center.z, WORLD_CONFIG.nearPlane);
+        const safeExtentDepth = Math.max(safeDepth - radius, WORLD_CONFIG.nearPlane);
+        const projectedRadius = (this.focalLength * radius) / safeExtentDepth;
+        const screenX = this.viewportWidth * 0.5 + center.x * (this.focalLength / safeDepth);
+        const screenY = this.viewportHeight * 0.5 - center.y * (this.focalLength / safeDepth);
+
+        return !(screenX + projectedRadius < -180
+            || screenX - projectedRadius > this.viewportWidth + 180
+            || screenY + projectedRadius < -180
+            || screenY - projectedRadius > this.viewportHeight + 180);
+    }
+
     render(camera, chunks) {
         if (!camera) {
             return;
@@ -51,12 +80,13 @@ export class SoftwareRenderer {
         this.drawBackground();
 
         const polygons = [];
-        const sinYaw = Math.sin(-camera.yaw);
-        const cosYaw = Math.cos(-camera.yaw);
-        const sinPitch = Math.sin(-camera.pitch);
-        const cosPitch = Math.cos(-camera.pitch);
+        const transform = createCameraTransform(camera);
 
         for (const chunk of chunks) {
+            if (!this.isChunkVisible(transform, chunk)) {
+                continue;
+            }
+
             for (const face of chunk.faces) {
                 const facing = (camera.position.x - face.center.x) * face.normal.x
                     + (camera.position.y - face.center.y) * face.normal.y
@@ -75,22 +105,16 @@ export class SoftwareRenderer {
                 const points = [];
 
                 for (const vertex of face.vertices) {
-                    const dx = vertex.x - camera.position.x;
-                    const dy = vertex.y - camera.position.y;
-                    const dz = vertex.z - camera.position.z;
-                    const yawX = dx * cosYaw - dz * sinYaw;
-                    const yawZ = dx * sinYaw + dz * cosYaw;
-                    const pitchY = dy * cosPitch - yawZ * sinPitch;
-                    const pitchZ = dy * sinPitch + yawZ * cosPitch;
+                    const cameraPoint = worldToCameraSpace(vertex, transform);
 
-                    if (pitchZ > WORLD_CONFIG.nearPlane) {
+                    if (cameraPoint.z > WORLD_CONFIG.nearPlane) {
                         allBehind = false;
                     }
 
-                    const safeDepth = Math.max(pitchZ, WORLD_CONFIG.nearPlane);
+                    const safeDepth = Math.max(cameraPoint.z, WORLD_CONFIG.nearPlane);
                     const scale = this.focalLength / safeDepth;
-                    const screenX = this.viewportWidth * 0.5 + yawX * scale;
-                    const screenY = this.viewportHeight * 0.5 - pitchY * scale;
+                    const screenX = this.viewportWidth * 0.5 + cameraPoint.x * scale;
+                    const screenY = this.viewportHeight * 0.5 - cameraPoint.y * scale;
 
                     depthSum += safeDepth;
                     minX = Math.min(minX, screenX);

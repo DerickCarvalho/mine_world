@@ -9,6 +9,8 @@ export class ChunkManager {
         this.retentionRadius = this.renderRadius + 1;
         this.queue = [];
         this.pending = new Set();
+        this.lastPlayerChunkX = null;
+        this.lastPlayerChunkZ = null;
     }
 
     overlapsWorld(chunkX, chunkZ) {
@@ -23,10 +25,22 @@ export class ChunkManager {
             && startZ <= WORLD_CONFIG.maxZ;
     }
 
-    update(position) {
+    getDistanceSq(chunkX, chunkZ, originChunkX, originChunkZ) {
+        const deltaX = chunkX - originChunkX;
+        const deltaZ = chunkZ - originChunkZ;
+        return deltaX * deltaX + deltaZ * deltaZ;
+    }
+
+    update(position, force = false) {
         const playerChunkX = getChunkCoord(position.x);
         const playerChunkZ = getChunkCoord(position.z);
-        const desiredKeys = new Set();
+
+        if (!force && this.lastPlayerChunkX === playerChunkX && this.lastPlayerChunkZ === playerChunkZ) {
+            return false;
+        }
+
+        this.lastPlayerChunkX = playerChunkX;
+        this.lastPlayerChunkZ = playerChunkZ;
 
         for (let offsetX = -this.renderRadius; offsetX <= this.renderRadius; offsetX += 1) {
             for (let offsetZ = -this.renderRadius; offsetZ <= this.renderRadius; offsetZ += 1) {
@@ -34,16 +48,16 @@ export class ChunkManager {
                 const chunkZ = playerChunkZ + offsetZ;
                 const key = createChunkKey(chunkX, chunkZ);
 
-                if (!this.overlapsWorld(chunkX, chunkZ)) {
+                if (!this.overlapsWorld(chunkX, chunkZ) || this.store.has(key) || this.pending.has(key)) {
                     continue;
                 }
 
-                desiredKeys.add(key);
-
-                if (!this.store.has(key) && !this.pending.has(key)) {
-                    this.pending.add(key);
-                    this.queue.push({ chunkX: chunkX, chunkZ: chunkZ });
-                }
+                this.pending.add(key);
+                this.queue.push({
+                    chunkX: chunkX,
+                    chunkZ: chunkZ,
+                    distanceSq: this.getDistanceSq(chunkX, chunkZ, playerChunkX, playerChunkZ)
+                });
             }
         }
 
@@ -53,19 +67,26 @@ export class ChunkManager {
             }
         }
 
-        this.queue = this.queue.filter((item) => {
-            const keep = Math.abs(item.chunkX - playerChunkX) <= this.retentionRadius
-                && Math.abs(item.chunkZ - playerChunkZ) <= this.retentionRadius
-                && this.overlapsWorld(item.chunkX, item.chunkZ);
+        this.queue = this.queue
+            .filter((item) => {
+                const keep = Math.abs(item.chunkX - playerChunkX) <= this.retentionRadius
+                    && Math.abs(item.chunkZ - playerChunkZ) <= this.retentionRadius
+                    && this.overlapsWorld(item.chunkX, item.chunkZ);
 
-            if (!keep) {
-                this.pending.delete(createChunkKey(item.chunkX, item.chunkZ));
-            }
+                if (!keep) {
+                    this.pending.delete(createChunkKey(item.chunkX, item.chunkZ));
+                }
 
-            return keep;
-        });
+                return keep;
+            })
+            .map((item) => ({
+                chunkX: item.chunkX,
+                chunkZ: item.chunkZ,
+                distanceSq: this.getDistanceSq(item.chunkX, item.chunkZ, playerChunkX, playerChunkZ)
+            }))
+            .sort((left, right) => left.distanceSq - right.distanceSq);
 
-        return desiredKeys;
+        return true;
     }
 
     drainQueue(maxChunksPerFrame = 1) {
@@ -87,12 +108,16 @@ export class ChunkManager {
         return generated;
     }
 
-    primeInitialChunks(position, targetCount = 12) {
-        this.update(position);
+    primeInitialChunks(position, targetCount = 10) {
+        this.update(position, true);
 
         while (this.store.size() < targetCount && this.queue.length > 0) {
             this.drainQueue(1);
         }
+    }
+
+    getPendingCount() {
+        return this.queue.length;
     }
 
     getLoadedChunkCount() {
