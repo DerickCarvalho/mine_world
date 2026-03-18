@@ -1,3 +1,5 @@
+﻿import { renderItemIconMarkup } from './ItemIcon.js';
+
 export class Hotbar {
     constructor(root) {
         this.root = root;
@@ -11,15 +13,17 @@ export class Hotbar {
 
         const hotbarSlots = Array.isArray(slots) ? slots.slice(0, 9) : [];
         this.root.innerHTML = hotbarSlots.map((slot, index) => {
-            const label = slot && slot.block_id ? slot.block_id.toUpperCase().slice(0, 3) : '';
             const quantity = slot && Number.isFinite(slot.quantity) ? slot.quantity : '';
+            const iconMarkup = slot && slot.block_id ? renderItemIconMarkup(slot.block_id, 'game-item-icon--hotbar') : '';
 
             return '<button class="game-hotbar__slot'
                 + (index === selectedIndex ? ' is-active' : '')
                 + '" type="button" data-hotbar-slot="' + index + '">'
-                + '<span class="game-hotbar__slot-label">' + label + '</span>'
+                + '<span class="game-hotbar__slot-body">'
+                + iconMarkup
                 + '<span class="game-hotbar__slot-count">' + quantity + '</span>'
                 + '<span class="game-hotbar__slot-index">' + (index + 1) + '</span>'
+                + '</span>'
                 + '</button>';
         }).join('');
 

@@ -1,11 +1,11 @@
-import { BLOCK_TYPES } from './BlockTypes.js';
+﻿import { BLOCK_TYPES } from './BlockTypes.js';
 import { SeededRandom } from './SeededRandom.js';
 import { WORLD_CONFIG, isWithinWorldBounds } from './WorldConfig.js';
 
 export class ProceduralSurfaceDecorator {
     constructor(seed, algorithmVersion, terrain) {
         this.terrain = terrain;
-        this.random = new SeededRandom(String(seed || 'mineworld') + '|surface|' + String(algorithmVersion || 'v2'));
+        this.random = new SeededRandom(String(seed || 'mineworld') + '|surface|' + String(algorithmVersion || 'v3.5'));
         this.columnCache = new Map();
         this.waterLevel = terrain.getWaterLevel();
     }
@@ -19,15 +19,14 @@ export class ProceduralSurfaceDecorator {
             return true;
         }
 
-        for (let offsetX = -2; offsetX <= 2; offsetX += 1) {
-            for (let offsetZ = -2; offsetZ <= 2; offsetZ += 1) {
+        for (let offsetX = -3; offsetX <= 3; offsetX += 1) {
+            for (let offsetZ = -3; offsetZ <= 3; offsetZ += 1) {
                 if (offsetX === 0 && offsetZ === 0) {
                     continue;
                 }
 
                 const sampleX = x + offsetX;
                 const sampleZ = z + offsetZ;
-
                 if (!isWithinWorldBounds(sampleX, sampleZ)) {
                     continue;
                 }
@@ -57,7 +56,7 @@ export class ProceduralSurfaceDecorator {
         if (biome.key === 'desert' || nearWater) {
             topBlockId = BLOCK_TYPES.sand;
             fillerBlockId = BLOCK_TYPES.sand;
-        } else if (slope >= 3 || surfaceHeight >= this.waterLevel + 24) {
+        } else if ((biome.key === 'mountains' && (slope >= 5 || surfaceHeight >= this.waterLevel + 27)) || surfaceHeight >= this.waterLevel + 36) {
             topBlockId = BLOCK_TYPES.stone;
             fillerBlockId = BLOCK_TYPES.stone;
         }
@@ -83,10 +82,11 @@ export class ProceduralSurfaceDecorator {
 
     getTreeScore(x, z) {
         const biome = this.terrain.getBiomeAt(x, z);
-        const biomeFactor = biome.key === 'forest' ? 1 : 0.68;
+        const biomeFactor = biome.key === 'forest' ? 1 : 0.42;
 
-        return (this.random.valueNoise2D(x, z, 0.052, 601) * 0.72
-            + this.random.random2D(x, z, 733) * 0.28) * biomeFactor;
+        return (this.random.valueNoise2D(x, z, 0.025, 601) * 0.68
+            + this.random.valueNoise2D(x + 1800, z - 900, 0.012, 733) * 0.22
+            + this.random.random2D(x, z, 877) * 0.1) * biomeFactor;
     }
 
     isTreeAnchor(x, z) {
@@ -95,8 +95,8 @@ export class ProceduralSurfaceDecorator {
             return false;
         }
 
-        const threshold = profile.biomeKey === 'forest' ? 0.62 : 0.86;
-        const radius = profile.biomeKey === 'forest' ? 3 : 4;
+        const threshold = profile.biomeKey === 'forest' ? 0.8 : 0.95;
+        const radius = profile.biomeKey === 'forest' ? 6 : 9;
         const score = this.getTreeScore(x, z);
 
         if (score < threshold) {
@@ -106,6 +106,9 @@ export class ProceduralSurfaceDecorator {
         for (let offsetX = -radius; offsetX <= radius; offsetX += 1) {
             for (let offsetZ = -radius; offsetZ <= radius; offsetZ += 1) {
                 if (offsetX === 0 && offsetZ === 0) {
+                    continue;
+                }
+                if (Math.abs(offsetX) + Math.abs(offsetZ) > radius + 1) {
                     continue;
                 }
 
@@ -129,8 +132,63 @@ export class ProceduralSurfaceDecorator {
         return true;
     }
 
-    getTreeHeight(x, z) {
-        return 4 + Math.floor(this.random.random2D(x, z, 907) * 3);
+    getTreeType(x, z) {
+        const value = this.random.random2D(x, z, 991);
+        return value > 0.74 ? 'eucalyptus' : 'oak';
+    }
+
+    decorateOakTree(worldX, worldZ, trunkBaseY, applyBlock) {
+        const trunkHeight = 4 + Math.floor(this.random.random2D(worldX, worldZ, 907) * 2);
+        const canopyBaseY = trunkBaseY + trunkHeight - 2;
+        const canopyTopY = trunkBaseY + trunkHeight + 1;
+
+        for (let y = trunkBaseY; y < trunkBaseY + trunkHeight; y += 1) {
+            applyBlock(worldX, y, worldZ, BLOCK_TYPES.wood, false);
+        }
+
+        for (let y = canopyBaseY; y <= canopyTopY; y += 1) {
+            const radius = y >= canopyTopY ? 1 : 2;
+
+            for (let offsetX = -radius; offsetX <= radius; offsetX += 1) {
+                for (let offsetZ = -radius; offsetZ <= radius; offsetZ += 1) {
+                    const distance = Math.abs(offsetX) + Math.abs(offsetZ);
+                    if (distance > radius + (y < canopyTopY ? 1 : 0)) {
+                        continue;
+                    }
+                    if (offsetX === 0 && offsetZ === 0 && y < canopyTopY) {
+                        continue;
+                    }
+
+                    applyBlock(worldX + offsetX, y, worldZ + offsetZ, BLOCK_TYPES.leaves, true);
+                }
+            }
+        }
+    }
+
+    decorateEucalyptusTree(worldX, worldZ, trunkBaseY, applyBlock) {
+        const trunkHeight = 7 + Math.floor(this.random.random2D(worldX, worldZ, 1013) * 3);
+        const canopyCenterY = trunkBaseY + trunkHeight - 1;
+
+        for (let y = trunkBaseY; y < trunkBaseY + trunkHeight; y += 1) {
+            applyBlock(worldX, y, worldZ, BLOCK_TYPES.wood, false);
+        }
+
+        for (let y = canopyCenterY - 1; y <= canopyCenterY + 1; y += 1) {
+            for (let offsetX = -1; offsetX <= 1; offsetX += 1) {
+                for (let offsetZ = -1; offsetZ <= 1; offsetZ += 1) {
+                    if (Math.abs(offsetX) + Math.abs(offsetZ) > 2) {
+                        continue;
+                    }
+                    if (offsetX === 0 && offsetZ === 0 && y < canopyCenterY + 1) {
+                        continue;
+                    }
+
+                    applyBlock(worldX + offsetX, y, worldZ + offsetZ, BLOCK_TYPES.leaves, true);
+                }
+            }
+        }
+
+        applyBlock(worldX, canopyCenterY + 2, worldZ, BLOCK_TYPES.leaves, true);
     }
 
     decorateTreesForChunk(chunkX, chunkZ, applyBlock) {
@@ -139,38 +197,18 @@ export class ProceduralSurfaceDecorator {
         const endX = startX + WORLD_CONFIG.chunkSize - 1;
         const endZ = startZ + WORLD_CONFIG.chunkSize - 1;
 
-        for (let worldX = startX - 3; worldX <= endX + 3; worldX += 1) {
-            for (let worldZ = startZ - 3; worldZ <= endZ + 3; worldZ += 1) {
+        for (let worldX = startX - 5; worldX <= endX + 5; worldX += 1) {
+            for (let worldZ = startZ - 5; worldZ <= endZ + 5; worldZ += 1) {
                 if (!isWithinWorldBounds(worldX, worldZ) || !this.isTreeAnchor(worldX, worldZ)) {
                     continue;
                 }
 
                 const trunkBaseY = this.getColumnProfile(worldX, worldZ).surfaceHeight;
-                const trunkHeight = this.getTreeHeight(worldX, worldZ);
-                const canopyBaseY = trunkBaseY + trunkHeight - 2;
-                const canopyTopY = trunkBaseY + trunkHeight + 1;
-
-                for (let y = trunkBaseY; y < trunkBaseY + trunkHeight; y += 1) {
-                    applyBlock(worldX, y, worldZ, BLOCK_TYPES.wood, false);
-                }
-
-                for (let y = canopyBaseY; y <= canopyTopY; y += 1) {
-                    const verticalDistance = Math.abs(y - (trunkBaseY + trunkHeight));
-                    const radius = y >= canopyTopY ? 1 : 2;
-
-                    for (let offsetX = -radius; offsetX <= radius; offsetX += 1) {
-                        for (let offsetZ = -radius; offsetZ <= radius; offsetZ += 1) {
-                            if (Math.abs(offsetX) + Math.abs(offsetZ) > 3 + Math.max(0, 1 - verticalDistance)) {
-                                continue;
-                            }
-
-                            if (offsetX === 0 && offsetZ === 0 && y < canopyTopY) {
-                                continue;
-                            }
-
-                            applyBlock(worldX + offsetX, y, worldZ + offsetZ, BLOCK_TYPES.leaves, true);
-                        }
-                    }
+                const treeType = this.getTreeType(worldX, worldZ);
+                if (treeType === 'eucalyptus') {
+                    this.decorateEucalyptusTree(worldX, worldZ, trunkBaseY, applyBlock);
+                } else {
+                    this.decorateOakTree(worldX, worldZ, trunkBaseY, applyBlock);
                 }
             }
         }

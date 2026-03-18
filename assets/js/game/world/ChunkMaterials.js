@@ -1,4 +1,4 @@
-﻿import { BLOCK_TYPES, getBlockDefinitionById, getBlockFaceBaseColor } from './BlockTypes.js';
+import { BLOCK_TYPES, getBlockDefinitionById, getBlockFaceBaseColor } from './BlockTypes.js';
 
 const SHADING = Object.freeze({
     top: 1,
@@ -50,4 +50,8 @@ export function getFaceMaterial(blockType, direction) {
         mergeable: !texture,
         mergeKey: texture ? null : [blockType, direction, alpha].join(':')
     };
+}
+
+export function getBlockTextureCatalog() {
+    return textureCatalog;
 }

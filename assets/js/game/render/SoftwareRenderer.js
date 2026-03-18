@@ -100,13 +100,13 @@ export class SoftwareRenderer {
         this.texturedPolygonBudget = turboEnabled
             ? Math.round(hardwareConcurrency * 110 + deviceMemory * 35)
             : Math.round(hardwareConcurrency * 70 + deviceMemory * 18);
-        this.minTexturedArea = turboEnabled ? 22 : 32;
+        this.minTexturedArea = turboEnabled ? 30 : 40;
         this.minRenderScale = turboEnabled ? 0.58 : 0.68;
         this.setRenderScale(this.renderScale);
     }
 
     prepareTextureSurface(image) {
-        const maxTextureSize = 24;
+        const maxTextureSize = 16;
         const largestDimension = Math.max(image.width || 1, image.height || 1);
         const scale = largestDimension > maxTextureSize ? maxTextureSize / largestDimension : 1;
         const width = Math.max(1, Math.round((image.width || 1) * scale));

@@ -6,7 +6,7 @@ import { ChunkStore } from './world/ChunkStore.js';
 import { TerrainGenerator } from './world/TerrainGenerator.js';
 import { MutableWorld } from './world/MutableWorld.js';
 import { RaycastPicker } from './world/RaycastPicker.js';
-import { getBlockIdByKey, getBlockKeyById, getBlockMaxStack, getBlockName, isPlaceableBlock } from './world/BlockTypes.js';
+import { getBlockDefinitionById, getBlockIdByKey, getBlockKeyById, getBlockMaxStack, getBlockName, isPlaceableBlock } from './world/BlockTypes.js';
 import { setBlockTextureCatalog } from './world/ChunkMaterials.js';
 import { WORLD_CONFIG, normalizeRuntimeConfig } from './world/WorldConfig.js';
 import { Hotbar } from './ui/Hotbar.js';
@@ -512,6 +512,9 @@ export class GameApp {
         }
         this.renderHealthBar();
         this.renderFlightIndicator();
+        if (this.hand) {
+            this.hand.setItem(this.inventorySlots[this.selectedHotbarIndex] || null);
+        }
         this.uiDirty = false;
     }
     updatePauseMenuData() {
@@ -565,6 +568,7 @@ export class GameApp {
         }
 
         if (locked) {
+            void this.audio.unlock();
             this.overlay.hideInstruction();
             this.overlay.setStatus('Explorando o terreno.');
             this.crosshair.show();
@@ -578,21 +582,11 @@ export class GameApp {
     }
 
     getChunkDrainBudget(deltaTime) {
-        let budget = 2;
-        if (deltaTime > 0.024) {
-            budget = 1;
-        } else if (this.chunkManager.getPendingCount() > 18 && deltaTime < 0.014) {
-            budget = 3;
-        }
-
-        if (this.performanceProfile.turboEnabled) {
+        let budget = deltaTime > 0.02 ? 1 : 2;
+        if (this.performanceProfile.turboEnabled && deltaTime < 0.016) {
             budget += 1;
         }
-        if (Number(this.performanceProfile.hardwareConcurrency || 0) >= 12 && deltaTime < 0.016) {
-            budget += 1;
-        }
-
-        return Math.max(1, Math.min(5, budget));
+        return Math.max(1, Math.min(3, budget));
     }
 
     setSelectedHotbarIndex(index) {
@@ -820,13 +814,13 @@ export class GameApp {
     async executeToggleFlyCommand(command) {
         const nextEnabled = !this.player.isFlyEnabled();
         this.player.setFlyEnabled(nextEnabled);
+        this.player.toggleFlightMode(nextEnabled);
         this.uiDirty = true;
         this.overlay.setStatus('Executando /' + command.command_key + '...');
         return nextEnabled
-            ? 'Fly habilitado. Use duplo espaco para entrar no voo e Shift para descer.'
+            ? 'Fly habilitado e ativo. Use espaco para subir e Shift para descer.'
             : 'Fly desativado.';
     }
-
     async executeSpawnMobCommand(command, args) {
         const mobType = (args[0] || 'gato').toLowerCase();
         const created = this.mobManager.spawnCommandMob(mobType, this.player.getFeetPosition(), this.player.getRotation());
@@ -940,6 +934,62 @@ export class GameApp {
         this.crosshair.setTargetActive(true);
     }
 
+
+    getSurfaceBlockIdUnderPlayer() {
+        if (!this.player || !this.world) {
+            return 0;
+        }
+
+        const feet = this.player.getFeetPosition();
+        const blockX = Math.floor(feet.x);
+        const blockZ = Math.floor(feet.z);
+        const topY = this.world.getTopSolidYAt(feet.x, feet.z);
+        if (topY < 0) {
+            return 0;
+        }
+
+        return this.world.getBlockIdAtBlock(blockX, topY, blockZ);
+    }
+
+    getBlockSoundKey(blockId) {
+        const key = getBlockDefinitionById(blockId).key;
+        if (key === 'grass') {
+            return 'grass';
+        }
+        if (key === 'dirt') {
+            return 'dirt';
+        }
+        if (key === 'stone' || key === 'bedrock') {
+            return 'stone';
+        }
+        if (key === 'sand') {
+            return 'sand';
+        }
+        if (key === 'wood') {
+            return 'wood';
+        }
+        if (key === 'leaves') {
+            return 'leaves';
+        }
+        return 'default';
+    }
+
+    updateFootsteps(deltaTime, movementState) {
+        if (!movementState || movementState.flying || !movementState.grounded || movementState.speed < 1.1) {
+            this.footstepElapsed = 0;
+            return;
+        }
+
+        this.footstepElapsed += deltaTime;
+        const interval = movementState.speed > 4.2 ? 0.34 : 0.43;
+        if (this.footstepElapsed < interval) {
+            return;
+        }
+
+        this.footstepElapsed = 0;
+        this.lastFootstepMaterial = this.getBlockSoundKey(this.getSurfaceBlockIdUnderPlayer());
+        this.audio.playFootstep(this.lastFootstepMaterial);
+    }
     breakTargetBlock() {
         if (!this.currentBlockTarget || !this.currentBlockTarget.breakable) {
             return;
@@ -953,6 +1003,7 @@ export class GameApp {
         this.addBlockToInventory(removedBlockId);
         this.chunkManager.markBlockDirty(this.currentBlockTarget.block.x, this.currentBlockTarget.block.y, this.currentBlockTarget.block.z);
         this.hand.triggerUse();
+        this.audio.playBlockBreak(this.getBlockSoundKey(removedBlockId));
         this.currentBlockTarget = null;
     }
 
@@ -967,6 +1018,7 @@ export class GameApp {
         }
 
         this.hand.triggerUse();
+        this.audio.playCatHurt();
         this.overlay.setStatus('O gato ficou agressivo.');
         if (this.chatOverlay) {
             this.chatOverlay.pushMessage('system', 'Voce acertou o gato. Agora ele vai atras de voce.');
@@ -997,6 +1049,7 @@ export class GameApp {
         this.decrementSelectedSlot();
         this.chunkManager.markBlockDirty(placeCell.x, placeCell.y, placeCell.z);
         this.hand.triggerUse();
+        this.audio.playBlockPlace(this.getBlockSoundKey(blockId));
         this.currentBlockTarget = null;
     }
 
@@ -1056,6 +1109,7 @@ export class GameApp {
         this.health = Math.max(0, this.health - damage);
         this.healthFlashTime = 0.32;
         this.uiDirty = true;
+        void this.audio.unlock();
         this.audio.playDamage();
 
         if (sourcePosition) {
@@ -1438,11 +1492,14 @@ export class GameApp {
 
         let chunkWindowChanged = false;
         let chunkResult = { processed: 0, generated: 0, rebuilt: 0 };
+        let movementState = this.player.getMovementState();
 
         if (this.sessionState === SESSION_STATES.RUNNING) {
             if (!this.inventoryOpen && !this.chatOpen) {
                 this.hudElapsed += deltaTime;
                 this.handlePlayerEvents(this.player.update(deltaTime));
+                movementState = this.player.getMovementState();
+                this.updateFootsteps(deltaTime, movementState);
             }
 
             this.handleMobEvents(this.mobManager.update(deltaTime, this.player.getFeetPosition()));
@@ -1450,7 +1507,7 @@ export class GameApp {
             chunkResult = this.chunkManager.drainQueue(this.getChunkDrainBudget(deltaTime));
 
             if (chunkWindowChanged || this.chunkManager.getPendingCount() > 0) {
-                void this.loadNextChunkBatch(this.performanceProfile.turboEnabled ? 10 : 8);
+                void this.loadNextChunkBatch(this.performanceProfile.turboEnabled ? 6 : 4);
             }
 
             if (chunkResult.generated > 0 || chunkResult.rebuilt > 0 || this.chunkManager.getPendingSaveCount() > 0) {
@@ -1468,7 +1525,7 @@ export class GameApp {
             this.renderUi();
         }
 
-        this.hand.update(deltaTime, this.player.getMovementState(), this.sessionState === SESSION_STATES.RUNNING && !this.inventoryOpen && !this.chatOpen && !this.dead);
+        this.hand.update(deltaTime, movementState, this.sessionState === SESSION_STATES.RUNNING && !this.inventoryOpen && !this.chatOpen && !this.dead);
         this.renderer.render(
             this.player.getCameraState(),
             this.chunkManager.getRenderableChunks(),

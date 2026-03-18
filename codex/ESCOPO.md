@@ -36,7 +36,10 @@ Quando houver necessidade de persistencia de conta, configuracoes e mundos, a ca
 - PRD-005 implementada: mao em primeira pessoa, hotbar/inventario simples, quebrar/colocar blocos, superficie com arvores/agua/areia/pedra e nevoa de distancia.
 - PRD-006 implementada: cache persistente de chunks, pre-geracao inicial, HUD contextual, configuracoes em runtime e camada de bedrock.
 - PRD-007 implementada: sistema de texturas por bloco, CRUD de comandos, chat in-game com teleporte, primeiro mob gato e pipeline de render mais leve.
-- Proxima frente apos PRD-007: crafting, progressao sandbox mais completa e expansao do sistema de comandos.
+- PRD-008 implementada: HUD de sobrevivencia refinado, voo estavel, audio sintetizado, cache dormant de chunks e worldgen 2.0.
+- PRD-009 implementada: worldgen 3.0 com serras/rios suaves, HUD inferior mais proximo do Minecraft e fix do travamento do gato.
+- PRD-010 implementada: held item no lugar da mao, inventario 3D coerente com o mundo, worldgen 3.5 e escala/fisica do player revisadas.
+- Proxima frente apos PRD-010: crafting, progressao sandbox mais completa e expansao do sistema de comandos.
 
 ## Regras de Produto Consolidadas
 
@@ -47,15 +50,16 @@ Quando houver necessidade de persistencia de conta, configuracoes e mundos, a ca
 - Exclusao de mundo deve exigir confirmacao explicita e remover o registro de forma definitiva, sem soft delete.
 - O primeiro mundo jogavel deve ser procedural.
 - A escala do jogo deve considerar `1 bloco = 1m x 1m x 1m`.
-- O mundo inicial deve ter dimensao logica de `5000 x 5000 x 100` blocos.
+- O mundo inicial deve ter dimensao logica de `2000 x 2000 x 100` blocos.
 - O jogador deve controlar camera em primeira pessoa com cursor, mouse, `WASD` e `espaco`.
 - O movimento na gameplay deve seguir a orientacao horizontal da camera.
 - O mouse deve controlar a camera com leitura natural por padrao, sem inversao vertical inesperada.
 - A tecla `P` deve abrir o menu de pausa e suspender de fato a gameplay.
 - `Salvar e sair` deve persistir o estado necessario do mundo e do jogador antes de retornar ao menu principal.
 - Ao reabrir um mundo salvo, o jogador deve nascer no ultimo ponto persistido valido.
-- A gameplay deve exibir mao em primeira pessoa com feedback visual de movimento e uso.
+- A gameplay deve exibir o item selecionado da hotbar como held item em primeira pessoa, sem mao visivel.
 - A gameplay deve oferecer hotbar de 9 slots e inventario simples de 27 slots para blocos.
+- Itens da hotbar e do inventario devem usar icones 3D coerentes com a textura/cor do mundo.
 - O jogador deve conseguir quebrar e colocar blocos dentro de um alcance controlado.
 - O jogador deve iniciar sem kit basico e coletar blocos a partir da quebra do mundo.
 - O estado salvo do mundo deve poder refletir inventario e mutacoes do terreno.
@@ -75,6 +79,15 @@ Quando houver necessidade de persistencia de conta, configuracoes e mundos, a ca
 - O primeiro comando suportado via chat deve ser `teleporte`.
 - O mundo deve poder spawnar um primeiro mob gato com baixa frequencia perto do jogador em area de mata.
 - O clique direito no gato deve alternar entre seguir o jogador e voltar ao comportamento normal.
+- A HUD inferior deve manter vida e estado de fly acima da hotbar central, em leitura mais proxima do Minecraft.
+- O modo fly deve respeitar colisao, usando `espaco` para subir e `Shift` para descer quando ativo.
+- O jogo deve emitir audio para dano, passos, hit de gato, quebrar bloco e colocar bloco.
+- Chunks distantes devem sair do runtime ativo e voltar por snapshot reaproveitado quando revisitadas.
+- Mundos novos devem nascer em `algorithm_version = v3.5`.
+- O relevo montanhoso atual deve priorizar serras e encostas suaves, e os rios devem ser rasos e largos, sem visual de canyon.
+- A geracao procedural `v3.5` deve reduzir crateras artificiais, suavizar cavernas e oferecer ao menos carvalho e eucalipto.
+- O gato nao pode travar a simulacao ao spawnar ou entrar em cena.
+- O player deve ter `1.95` blocos de altura, corpo mais fino e locomocao mais agil.
 
 ## PRDs Ativas
 
@@ -87,6 +100,9 @@ Quando houver necessidade de persistencia de conta, configuracoes e mundos, a ca
 | PRD-005 | Loop sandbox com inventario e superficie viva | Implementada | PRD-004 | Adicionar mao em primeira pessoa, hotbar/inventario simples, quebrar/colocar blocos, enriquecer a superficie procedural e aplicar nevoa de distancia. |
 | PRD-006 | Cache de chunks, HUD contextual e refinamento in-game | Implementada | PRD-004, PRD-005 | Persistir chunks por mundo, pre-gerar a janela inicial, mover HUD tecnica para atalhos/contexto, permitir configuracoes em runtime e proteger a base com bedrock. |
 | PRD-007 | Texturas, comandos, chat e primeiro mob | Implementada | PRD-005, PRD-006 | Adicionar texturas opcionais por bloco, CRUD de comandos com validacao local, chat in-game com teleporte, primeiro gato e reducao do custo de render. |
+| PRD-008 | Survival HUD, audio e worldgen 2.0 | Implementada | PRD-006, PRD-007 | Refinar mao e HUD, estabilizar fly, adicionar audio sintetizado, descarregar chunks com cache dormant e evoluir a geracao procedural para biomas mais naturais. |
+| PRD-009 | Worldgen 3.0, HUD Minecraft-like e fix do gato | Implementada | PRD-008 | Substituir o algoritmo por `v3` para novos mundos, suavizar serras e rios, aproximar o HUD da referencia visual alvo e remover o travamento do gato. |
+| PRD-010 | Held item, inventario 3D e worldgen 3.5 | Implementada | PRD-009 | Remover a mao visivel, reaproveitar as texturas do mundo nos itens da UI, migrar novos mundos para `v3.5` e revisar escala/fisica do player. |
 
 ## Fora do Escopo Atual
 
@@ -96,6 +112,6 @@ Quando houver necessidade de persistencia de conta, configuracoes e mundos, a ca
 
 ## Backlog de Curto Prazo
 
-- Expandir o catalogo de comandos validaveis alem de teleporte
+- Expandir o catalogo de comandos validaveis alem de teleporte e fly
 - Planejar persistencia e interacoes mais ricas para mobs
 - Planejar progressao sandbox depois do primeiro loop de construcao persistente

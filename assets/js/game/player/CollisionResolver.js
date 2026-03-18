@@ -1,4 +1,4 @@
-import { WORLD_CONFIG, clampNumber } from '../world/WorldConfig.js';
+﻿import { WORLD_CONFIG, clampNumber } from '../world/WorldConfig.js';
 
 export class CollisionResolver {
     constructor(world) {
@@ -84,6 +84,14 @@ export class CollisionResolver {
         };
     }
 
+    canOccupyAtFootY(x, footY, z) {
+        if (!this.world.isInsideWorld(x, z)) {
+            return false;
+        }
+
+        return !this.collidesBody(x, footY, z);
+    }
+
     resolveHorizontal(position, deltaX, deltaZ) {
         let nextX = position.x;
         let nextZ = position.z;
@@ -128,6 +136,43 @@ export class CollisionResolver {
             y: proposedFootY,
             grounded: false,
             hitCeiling: false
+        };
+    }
+
+    resolveFlyingVertical(position, deltaY) {
+        if (!deltaY) {
+            return {
+                y: position.y,
+                grounded: false,
+                hitCeiling: false,
+                hitFloor: false
+            };
+        }
+
+        const direction = Math.sign(deltaY);
+        const steps = Math.max(1, Math.ceil(Math.abs(deltaY) / 0.12));
+        const stepDelta = deltaY / steps;
+        let currentY = position.y;
+
+        for (let index = 0; index < steps; index += 1) {
+            const candidateY = currentY + stepDelta;
+            if (!this.canOccupyAtFootY(position.x, candidateY, position.z)) {
+                return {
+                    y: currentY,
+                    grounded: false,
+                    hitCeiling: direction > 0,
+                    hitFloor: direction < 0
+                };
+            }
+
+            currentY = candidateY;
+        }
+
+        return {
+            y: currentY,
+            grounded: false,
+            hitCeiling: false,
+            hitFloor: false
         };
     }
 }

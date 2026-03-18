@@ -9,7 +9,7 @@ $service = new funcoesPDO();
 $data = request_data();
 $worldName = validate_world_name((string) ($data['nome'] ?? ''));
 $seed = normalize_world_seed($data['seed'] ?? null);
-$algorithmVersion = 'v2';
+$algorithmVersion = 'v3.5';
 
 $worldId = $service->insert(
     'INSERT INTO mundos (usuario_id, nome, seed, algorithm_version)

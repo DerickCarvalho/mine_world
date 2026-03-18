@@ -25,6 +25,20 @@ export class MutableWorld {
         this.mutationChunkIndex = new Map();
     }
 
+
+    syncDormantSnapshot(snapshot) {
+        if (!snapshot) {
+            return;
+        }
+
+        this.dormantChunkCache.delete(snapshot.key);
+        this.dormantChunkCache.set(snapshot.key, createChunkSnapshot(snapshot.chunkX, snapshot.chunkZ, new Uint8Array(snapshot.data)));
+
+        while (this.dormantChunkCache.size > this.dormantChunkLimit) {
+            const oldestKey = this.dormantChunkCache.keys().next().value;
+            this.dormantChunkCache.delete(oldestKey);
+        }
+    }
     getChunkArraySize() {
         return WORLD_CONFIG.chunkSize * WORLD_CONFIG.chunkSize * WORLD_CONFIG.height;
     }
@@ -86,7 +100,12 @@ export class MutableWorld {
     }
 
     unloadChunk(chunkX, chunkZ) {
-        this.chunkCache.delete(this.getChunkKey(chunkX, chunkZ));
+        const key = this.getChunkKey(chunkX, chunkZ);
+        const snapshot = this.chunkCache.get(key);
+        if (snapshot) {
+            this.syncDormantSnapshot(snapshot);
+        }
+        this.chunkCache.delete(key);
     }
 
     buildChunkBaseData(chunkX, chunkZ) {

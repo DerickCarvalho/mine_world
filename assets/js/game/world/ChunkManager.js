@@ -11,7 +11,7 @@ export class ChunkManager {
         this.mesher = options.mesher;
         this.world = options.world;
         this.renderRadius = getRuntimeRenderRadius(options.renderDistance);
-        this.retentionRadius = this.renderRadius + 1;
+        this.retentionRadius = this.renderRadius;
         this.requestQueue = [];
         this.requestPending = new Set();
         this.loadingPending = new Set();
@@ -26,7 +26,7 @@ export class ChunkManager {
 
     setRenderDistance(renderDistance) {
         this.renderRadius = getRuntimeRenderRadius(renderDistance);
-        this.retentionRadius = this.renderRadius + 1;
+        this.retentionRadius = this.renderRadius;
     }
 
     overlapsWorld(chunkX, chunkZ) {

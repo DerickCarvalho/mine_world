@@ -1,11 +1,11 @@
-import { BLOCK_TYPES } from './BlockTypes.js';
+﻿import { BLOCK_TYPES } from './BlockTypes.js';
 import { SeededRandom } from './SeededRandom.js';
 import { WORLD_CONFIG, clampNumber, getBlockCoord, isWithinWorldBounds } from './WorldConfig.js';
 
 export class TerrainGenerator {
-    constructor(seed, algorithmVersion = 'v2') {
+    constructor(seed, algorithmVersion = 'v3.5') {
         this.seed = String(seed || 'mineworld');
-        this.algorithmVersion = String(algorithmVersion || 'v2');
+        this.algorithmVersion = String(algorithmVersion || 'v3.5');
         this.random = new SeededRandom(this.seed + '|' + this.algorithmVersion);
         this.heightCache = new Map();
         this.biomeCache = new Map();
@@ -35,7 +35,10 @@ export class TerrainGenerator {
                 moisture: 0,
                 continental: 0,
                 riverWeight: 0,
-                lakeWeight: 0
+                lakeWeight: 0,
+                mountainWeight: 0,
+                foothillWeight: 0,
+                region: 0
             };
         }
 
@@ -44,52 +47,85 @@ export class TerrainGenerator {
             return this.biomeCache.get(key);
         }
 
+        const region = this.random.fractalNoise2D(blockX, blockZ, {
+            frequency: 0.00042,
+            octaves: 4,
+            lacunarity: 2.02,
+            persistence: 0.58,
+            salt: 15
+        });
         const temperature = this.random.fractalNoise2D(blockX + 900, blockZ - 400, {
-            frequency: 0.0016,
+            frequency: 0.00094,
             octaves: 4,
             lacunarity: 2.04,
             persistence: 0.52,
             salt: 41
         });
         const moisture = this.random.fractalNoise2D(blockX - 700, blockZ + 1200, {
-            frequency: 0.0017,
+            frequency: 0.00108,
             octaves: 4,
             lacunarity: 2.08,
-            persistence: 0.5,
+            persistence: 0.54,
             salt: 89
         });
         const continental = this.random.fractalNoise2D(blockX, blockZ, {
-            frequency: 0.0011,
+            frequency: 0.00076,
             octaves: 5,
             lacunarity: 2.02,
-            persistence: 0.54,
+            persistence: 0.56,
             salt: 11
         });
-        const riverRaw = Math.abs(this.random.fractalNoise2D(blockX, blockZ, {
-            frequency: 0.0047,
-            octaves: 3,
-            lacunarity: 2,
+        const mountainRidge = Math.abs(this.random.fractalNoise2D(blockX - 3200, blockZ + 1700, {
+            frequency: 0.00086,
+            octaves: 4,
+            lacunarity: 2.04,
             persistence: 0.56,
-            salt: 313
+            salt: 177
         }) * 2 - 1);
-        const riverWeight = clampNumber((0.085 - riverRaw) / 0.085, 0, 1);
-        const lakeNoise = this.random.fractalNoise2D(blockX, blockZ, {
-            frequency: 0.0022,
+        const mountainWeight = clampNumber((0.22 - mountainRidge) / 0.22, 0, 1) * clampNumber((continental - 0.36) / 0.44, 0, 1);
+        const foothillNoise = this.random.fractalNoise2D(blockX + 2200, blockZ - 1400, {
+            frequency: 0.0012,
             octaves: 3,
+            lacunarity: 2.02,
+            persistence: 0.58,
+            salt: 207
+        });
+        const foothillWeight = clampNumber((foothillNoise - 0.44) / 0.36, 0, 1) * clampNumber((continental - 0.24) / 0.5, 0, 1);
+        const riverNoise = this.random.fractalNoise2D(blockX, blockZ, {
+            frequency: 0.0018,
+            octaves: 2,
             lacunarity: 2,
             persistence: 0.58,
+            salt: 313
+        });
+        const riverCenter = Math.abs(riverNoise * 2 - 1);
+        const riverWeight = clampNumber((0.055 - riverCenter) / 0.055, 0, 1);
+        const lakeNoise = this.random.fractalNoise2D(blockX + 700, blockZ - 900, {
+            frequency: 0.00105,
+            octaves: 3,
+            lacunarity: 2,
+            persistence: 0.6,
             salt: 421
         });
-        const lakeWeight = lakeNoise > 0.74 ? clampNumber((lakeNoise - 0.74) / 0.16, 0, 1) : 0;
+        const basinNoise = this.random.fractalNoise2D(blockX - 1200, blockZ + 300, {
+            frequency: 0.00066,
+            octaves: 3,
+            lacunarity: 2.04,
+            persistence: 0.57,
+            salt: 517
+        });
+        const lakeWeight = lakeNoise > 0.72 && basinNoise > 0.58 ? clampNumber((lakeNoise - 0.72) / 0.18, 0, 1) : 0;
 
         let biomeKey = 'plains';
-        if (riverWeight >= 0.72) {
+        if (riverWeight >= 0.54) {
             biomeKey = 'river';
-        } else if (lakeWeight > 0.68 && continental < 0.58) {
+        } else if (lakeWeight >= 0.5) {
             biomeKey = 'lake';
-        } else if (temperature > 0.63 && moisture < 0.38) {
+        } else if (mountainWeight >= 0.4) {
+            biomeKey = 'mountains';
+        } else if (temperature > 0.62 && moisture < 0.36 && region > 0.38) {
             biomeKey = 'desert';
-        } else if (moisture > 0.58) {
+        } else if (moisture > 0.54 || (region < 0.22 && moisture > 0.46)) {
             biomeKey = 'forest';
         }
 
@@ -99,7 +135,10 @@ export class TerrainGenerator {
             moisture: moisture,
             continental: continental,
             riverWeight: riverWeight,
-            lakeWeight: lakeWeight
+            lakeWeight: lakeWeight,
+            mountainWeight: mountainWeight,
+            foothillWeight: foothillWeight,
+            region: region
         };
 
         this.biomeCache.set(key, biome);
@@ -126,56 +165,73 @@ export class TerrainGenerator {
 
     computeHeight(x, z) {
         const biome = this.getBiomeAt(x, z);
-        const rolling = this.random.fractalNoise2D(x, z, {
-            frequency: 0.0054,
+        const continentalBase = this.random.fractalNoise2D(x, z, {
+            frequency: 0.0008,
             octaves: 4,
-            lacunarity: 2.08,
-            persistence: 0.48,
+            lacunarity: 2.02,
+            persistence: 0.57,
             salt: 137
         });
-        const hills = this.random.fractalNoise2D(x, z, {
-            frequency: 0.0105,
+        const rolling = this.random.fractalNoise2D(x, z, {
+            frequency: 0.0028,
             octaves: 3,
-            lacunarity: 2.16,
-            persistence: 0.44,
+            lacunarity: 2.04,
+            persistence: 0.5,
             salt: 211
         });
         const detail = this.random.fractalNoise2D(x, z, {
-            frequency: 0.023,
+            frequency: 0.0072,
             octaves: 2,
             lacunarity: 2,
-            persistence: 0.45,
+            persistence: 0.44,
             salt: 283
         });
+        const mountainSoft = this.random.fractalNoise2D(x + 1600, z - 800, {
+            frequency: 0.0015,
+            octaves: 3,
+            lacunarity: 2.04,
+            persistence: 0.58,
+            salt: 601
+        });
         const dune = this.random.fractalNoise2D(x + 400, z - 300, {
-            frequency: 0.013,
+            frequency: 0.0068,
             octaves: 2,
             lacunarity: 2,
             persistence: 0.54,
-            salt: 331
+            salt: 349
         });
 
-        let rawHeight;
+        let rawHeight = 30 + biome.continental * 7 + continentalBase * 4 + rolling * 3.4 + detail * 1.2;
+
         if (biome.key === 'desert') {
-            rawHeight = 26 + biome.continental * 8 + rolling * 4 + dune * 6 + detail * 2;
+            rawHeight = 28 + biome.continental * 5 + continentalBase * 2.6 + rolling * 1.8 + dune * 3.8 + detail * 0.8;
         } else if (biome.key === 'forest') {
-            rawHeight = 33 + biome.continental * 12 + rolling * 8 + hills * 7 + detail * 4;
-        } else {
-            rawHeight = 30 + biome.continental * 10 + rolling * 6 + hills * 5 + detail * 3;
+            rawHeight = 32 + biome.continental * 7.2 + continentalBase * 3.6 + rolling * 3.8 + detail * 1.4;
+        } else if (biome.key === 'mountains') {
+            rawHeight = 35
+                + biome.continental * 8.2
+                + continentalBase * 3
+                + biome.foothillWeight * 5.5
+                + biome.mountainWeight * 9.5
+                + mountainSoft * 5.8
+                + rolling * 2.4
+                + detail * 0.7;
+        } else if (biome.foothillWeight > 0.24) {
+            rawHeight += biome.foothillWeight * 4.6 + rolling * 1.4;
         }
 
         if (biome.riverWeight > 0) {
-            rawHeight -= biome.riverWeight * (8 + (1 - biome.continental) * 4);
-            rawHeight = Math.min(rawHeight, this.waterLevel - 1 + detail * 2);
+            rawHeight -= biome.riverWeight * 2.6;
+            rawHeight = Math.min(rawHeight, this.waterLevel + 0.5 + detail * 0.25);
         }
 
         if (biome.key === 'lake') {
-            rawHeight = Math.min(rawHeight, this.waterLevel - 2 + detail * 1.5);
+            rawHeight = Math.min(rawHeight, this.waterLevel - 0.6 + detail * 0.35);
         }
 
         const edgeDistanceX = Math.min(x - WORLD_CONFIG.minX, WORLD_CONFIG.maxX - x);
         const edgeDistanceZ = Math.min(z - WORLD_CONFIG.minZ, WORLD_CONFIG.maxZ - z);
-        const edgeFactor = clampNumber(Math.min(edgeDistanceX, edgeDistanceZ) / 90, 0, 1);
+        const edgeFactor = clampNumber(Math.min(edgeDistanceX, edgeDistanceZ) / 96, 0, 1);
 
         return clampNumber(
             Math.round(rawHeight * edgeFactor + 8 * (1 - edgeFactor)),
@@ -185,57 +241,57 @@ export class TerrainGenerator {
     }
 
     hasCaveEntranceAt(x, z) {
-        const noise = this.random.fractalNoise2D(x, z, {
-            frequency: 0.0084,
+        const entranceNoise = this.random.fractalNoise2D(x, z, {
+            frequency: 0.0048,
             octaves: 2,
             lacunarity: 2,
-            persistence: 0.55,
+            persistence: 0.56,
             salt: 809
         });
-        const ridged = Math.abs(this.random.fractalNoise2D(x + 700, z - 500, {
-            frequency: 0.011,
+        const ridge = Math.abs(this.random.fractalNoise2D(x + 700, z - 500, {
+            frequency: 0.0062,
             octaves: 2,
             lacunarity: 2,
-            persistence: 0.5,
+            persistence: 0.52,
             salt: 947
         }) * 2 - 1);
 
-        return noise > 0.7 && ridged < 0.45;
+        return entranceNoise > 0.78 && ridge < 0.32;
     }
 
     isCaveAir(x, y, z, surfaceHeight) {
-        if (y <= 2 || y >= surfaceHeight) {
+        if (y <= 3 || y >= surfaceHeight) {
             return false;
         }
 
         const depth = surfaceHeight - y;
         const entrance = this.hasCaveEntranceAt(x, z);
-        if (depth < 3 && !entrance) {
+        if (depth < 4 && !entrance) {
             return false;
         }
 
-        const caveNoiseA = this.random.fractalNoise2D(x + y * 8.11, z - y * 5.27, {
-            frequency: 0.047,
-            octaves: 3,
+        const tunnelA = this.random.fractalNoise2D(x + y * 2.7, z - y * 1.9, {
+            frequency: 0.024,
+            octaves: 2,
             lacunarity: 2,
-            persistence: 0.52,
+            persistence: 0.54,
             salt: 701
         });
-        const caveNoiseB = this.random.fractalNoise2D(x - y * 6.3, z + y * 9.17, {
-            frequency: 0.051,
-            octaves: 3,
+        const tunnelB = this.random.fractalNoise2D(x - y * 2.1, z + y * 2.6, {
+            frequency: 0.026,
+            octaves: 2,
             lacunarity: 2.02,
-            persistence: 0.5,
+            persistence: 0.52,
             salt: 919
         });
-        const caveValue = (caveNoiseA + caveNoiseB) * 0.5;
+        const caveValue = (tunnelA + tunnelB) * 0.5;
 
-        let threshold = entrance ? 0.59 : 0.665;
-        if (depth < 6) {
+        let threshold = entrance ? 0.73 : 0.81;
+        if (depth < 8) {
             threshold += 0.05;
         }
-        if (y < 14) {
-            threshold += 0.03;
+        if (y < 18) {
+            threshold -= 0.02;
         }
 
         return caveValue > threshold;
@@ -303,7 +359,7 @@ export class TerrainGenerator {
             height: this.getSurfaceHeightAt(0, 0)
         };
 
-        for (let radius = 0; radius <= 64; radius += 8) {
+        for (let radius = 0; radius <= 80; radius += 8) {
             for (let offsetX = -radius; offsetX <= radius; offsetX += 8 || 1) {
                 for (let offsetZ = -radius; offsetZ <= radius; offsetZ += 8 || 1) {
                     const x = offsetX;
@@ -314,7 +370,7 @@ export class TerrainGenerator {
                     }
 
                     const biome = this.getBiomeAt(x, z);
-                    if (biome.key === 'river' || biome.key === 'lake') {
+                    if (biome.key === 'river' || biome.key === 'lake' || biome.key === 'mountains') {
                         continue;
                     }
 

@@ -1,4 +1,4 @@
-function createFace(vertices, normal, color, shade, alpha) {
+﻿function createFace(vertices, normal, color, shade, alpha) {
     const center = vertices.reduce(function (accumulator, vertex) {
         accumulator.x += vertex.x;
         accumulator.y += vertex.y;
@@ -20,49 +20,52 @@ function createFace(vertices, normal, color, shade, alpha) {
     };
 }
 
-function createCuboidFaces(bounds, palette) {
+function createCuboidFaces(origin, part, palette) {
+    const minX = origin.x + part.minX;
+    const maxX = origin.x + part.maxX;
+    const minY = origin.y + part.minY;
+    const maxY = origin.y + part.maxY;
+    const minZ = origin.z + part.minZ;
+    const maxZ = origin.z + part.maxZ;
+
     return [
         createFace([
-            { x: bounds.minX, y: bounds.maxY, z: bounds.minZ },
-            { x: bounds.maxX, y: bounds.maxY, z: bounds.minZ },
-            { x: bounds.maxX, y: bounds.maxY, z: bounds.maxZ },
-            { x: bounds.minX, y: bounds.maxY, z: bounds.maxZ }
+            { x: minX, y: maxY, z: minZ },
+            { x: maxX, y: maxY, z: minZ },
+            { x: maxX, y: maxY, z: maxZ },
+            { x: minX, y: maxY, z: maxZ }
         ], { x: 0, y: 1, z: 0 }, palette.top, 1, 1),
         createFace([
-            { x: bounds.minX, y: bounds.minY, z: bounds.maxZ },
-            { x: bounds.maxX, y: bounds.minY, z: bounds.maxZ },
-            { x: bounds.maxX, y: bounds.minY, z: bounds.minZ },
-            { x: bounds.minX, y: bounds.minY, z: bounds.minZ }
-        ], { x: 0, y: -1, z: 0 }, palette.bottom, 0.56, 1),
+            { x: minX, y: minY, z: maxZ },
+            { x: maxX, y: minY, z: maxZ },
+            { x: maxX, y: minY, z: minZ },
+            { x: minX, y: minY, z: minZ }
+        ], { x: 0, y: -1, z: 0 }, palette.bottom, 0.58, 1),
         createFace([
-            { x: bounds.minX, y: bounds.minY, z: bounds.minZ },
-            { x: bounds.maxX, y: bounds.minY, z: bounds.minZ },
-            { x: bounds.maxX, y: bounds.maxY, z: bounds.minZ },
-            { x: bounds.minX, y: bounds.maxY, z: bounds.minZ }
+            { x: minX, y: minY, z: minZ },
+            { x: maxX, y: minY, z: minZ },
+            { x: maxX, y: maxY, z: minZ },
+            { x: minX, y: maxY, z: minZ }
         ], { x: 0, y: 0, z: -1 }, palette.side, 0.82, 1),
         createFace([
-            { x: bounds.maxX, y: bounds.minY, z: bounds.maxZ },
-            { x: bounds.minX, y: bounds.minY, z: bounds.maxZ },
-            { x: bounds.minX, y: bounds.maxY, z: bounds.maxZ },
-            { x: bounds.maxX, y: bounds.maxY, z: bounds.maxZ }
+            { x: maxX, y: minY, z: maxZ },
+            { x: minX, y: minY, z: maxZ },
+            { x: minX, y: maxY, z: maxZ },
+            { x: maxX, y: maxY, z: maxZ }
         ], { x: 0, y: 0, z: 1 }, palette.side, 0.92, 1),
         createFace([
-            { x: bounds.maxX, y: bounds.minY, z: bounds.minZ },
-            { x: bounds.maxX, y: bounds.maxY, z: bounds.minZ },
-            { x: bounds.maxX, y: bounds.maxY, z: bounds.maxZ },
-            { x: bounds.maxX, y: bounds.minY, z: bounds.maxZ }
+            { x: maxX, y: minY, z: minZ },
+            { x: maxX, y: maxY, z: minZ },
+            { x: maxX, y: maxY, z: maxZ },
+            { x: maxX, y: minY, z: maxZ }
         ], { x: 1, y: 0, z: 0 }, palette.side, 0.86, 1),
         createFace([
-            { x: bounds.minX, y: bounds.minY, z: bounds.maxZ },
-            { x: bounds.minX, y: bounds.maxY, z: bounds.maxZ },
-            { x: bounds.minX, y: bounds.maxY, z: bounds.minZ },
-            { x: bounds.minX, y: bounds.minY, z: bounds.minZ }
+            { x: minX, y: minY, z: maxZ },
+            { x: minX, y: maxY, z: maxZ },
+            { x: minX, y: maxY, z: minZ },
+            { x: minX, y: minY, z: minZ }
         ], { x: -1, y: 0, z: 0 }, palette.side, 0.78, 1)
     ];
-}
-
-function angleToYaw(directionX, directionZ) {
-    return Math.atan2(-directionX, directionZ);
 }
 
 function tintColor(color, tint, amount) {
@@ -99,6 +102,8 @@ export class CatMob {
         this.yaw = 0;
         this.speed = 2.1;
         this.chaseSpeed = 3.15;
+        this.cachedRenderable = null;
+        this.cachedPoseKey = '';
     }
 
     getDisplayName() {
@@ -119,12 +124,12 @@ export class CatMob {
 
     getAabb() {
         return {
-            minX: this.position.x - 0.36,
-            maxX: this.position.x + 0.36,
+            minX: this.position.x - 0.34,
+            maxX: this.position.x + 0.34,
             minY: this.position.y,
-            maxY: this.position.y + 0.95,
-            minZ: this.position.z - 0.6,
-            maxZ: this.position.z + 0.6
+            maxY: this.position.y + 0.98,
+            minZ: this.position.z - 0.62,
+            maxZ: this.position.z + 0.62
         };
     }
 
@@ -157,14 +162,15 @@ export class CatMob {
         if (attackerPosition) {
             const deltaX = attackerPosition.x - this.position.x;
             const deltaZ = attackerPosition.z - this.position.z;
-            if (Math.hypot(deltaX, deltaZ) > 0.001) {
-                this.yaw = angleToYaw(deltaX, deltaZ);
+            const distance = Math.hypot(deltaX, deltaZ);
+            if (distance > 0.001) {
+                this.yaw = Math.atan2(-deltaX, deltaZ);
             }
         }
     }
 
     update(deltaTime, playerPosition, world, isWalkable) {
-        this.animationTime += deltaTime * (this.aggressive ? 9 : (this.following ? 7 : 4));
+        this.animationTime += deltaTime * (this.aggressive ? 8 : (this.following ? 6 : 3.5));
         this.hurtTime = Math.max(0, this.hurtTime - deltaTime);
         this.attackCooldown = Math.max(0, this.attackCooldown - deltaTime);
 
@@ -256,82 +262,79 @@ export class CatMob {
         this.position.x = nextX;
         this.position.z = nextZ;
         this.position.y = topY + 1;
-        this.yaw = angleToYaw(directionX, directionZ);
+        this.yaw = Math.atan2(-directionX, directionZ);
         return false;
     }
 
     getRenderable() {
-        const cosYaw = Math.cos(this.yaw);
-        const sinYaw = Math.sin(this.yaw);
-        const legSwing = Math.sin(this.animationTime) * 0.06;
+        const legSwing = Math.sin(this.animationTime) * 0.07;
+        const tailLift = Math.sin(this.animationTime * 0.75) * 0.03;
         const hurtPulse = this.hurtTime > 0 ? Math.abs(Math.sin((this.hurtTime / 0.34) * Math.PI * 5)) * 0.45 : 0;
         const tint = this.aggressive ? { r: 214, g: 108, b: 98 } : { r: 245, g: 182, b: 116 };
+        const poseKey = [
+            this.position.x.toFixed(2),
+            this.position.y.toFixed(2),
+            this.position.z.toFixed(2),
+            legSwing.toFixed(3),
+            tailLift.toFixed(3),
+            hurtPulse.toFixed(3),
+            this.aggressive ? 1 : 0
+        ].join('|');
+
+        if (this.cachedRenderable && this.cachedPoseKey === poseKey) {
+            return this.cachedRenderable;
+        }
+
         const bodyPalette = tintPalette({
-            top: { r: 212, g: 158, b: 92 },
-            side: { r: 191, g: 132, b: 73 },
-            bottom: { r: 150, g: 104, b: 58 }
-        }, tint, hurtPulse + (this.aggressive ? 0.1 : 0));
+            top: { r: 218, g: 160, b: 92 },
+            side: { r: 194, g: 135, b: 73 },
+            bottom: { r: 148, g: 102, b: 56 }
+        }, tint, hurtPulse + (this.aggressive ? 0.12 : 0));
+        const muzzlePalette = tintPalette({
+            top: { r: 241, g: 205, b: 159 },
+            side: { r: 226, g: 182, b: 139 },
+            bottom: { r: 204, g: 160, b: 120 }
+        }, tint, hurtPulse * 0.45);
         const earPalette = tintPalette({
-            top: { r: 238, g: 187, b: 133 },
-            side: { r: 216, g: 156, b: 108 },
-            bottom: { r: 196, g: 140, b: 98 }
-        }, tint, hurtPulse * 0.8);
+            top: { r: 246, g: 209, b: 173 },
+            side: { r: 224, g: 174, b: 134 },
+            bottom: { r: 198, g: 150, b: 116 }
+        }, tint, hurtPulse * 0.65);
         const tailPalette = tintPalette({
-            top: { r: 185, g: 128, b: 71 },
-            side: { r: 170, g: 118, b: 64 },
-            bottom: { r: 138, g: 94, b: 53 }
-        }, tint, hurtPulse * 0.6);
-        const hurtLift = this.hurtTime > 0 ? Math.sin((this.hurtTime / 0.34) * Math.PI * 4) * 0.04 : 0;
+            top: { r: 192, g: 132, b: 71 },
+            side: { r: 172, g: 118, b: 64 },
+            bottom: { r: 140, g: 96, b: 54 }
+        }, tint, hurtPulse * 0.5);
+        const hurtLift = this.hurtTime > 0 ? Math.sin((this.hurtTime / 0.34) * Math.PI * 4) * 0.03 : 0;
 
         const parts = [
-            { minX: -0.28, maxX: 0.28, minY: 0.28 + hurtLift, maxY: 0.64 + hurtLift, minZ: -0.42, maxZ: 0.38, palette: bodyPalette },
-            { minX: -0.2, maxX: 0.2, minY: 0.42 + hurtLift, maxY: 0.82 + hurtLift, minZ: 0.34, maxZ: 0.72, palette: bodyPalette },
-            { minX: -0.16, maxX: -0.03, minY: 0.76 + hurtLift, maxY: 0.92 + hurtLift, minZ: 0.54, maxZ: 0.68, palette: earPalette },
-            { minX: 0.03, maxX: 0.16, minY: 0.76 + hurtLift, maxY: 0.92 + hurtLift, minZ: 0.54, maxZ: 0.68, palette: earPalette },
-            { minX: -0.06, maxX: 0.06, minY: 0.44 + hurtLift, maxY: 0.54 + hurtLift, minZ: -0.7, maxZ: -0.32, palette: tailPalette },
-            { minX: -0.22, maxX: -0.12, minY: 0, maxY: 0.34 + legSwing, minZ: 0.18, maxZ: 0.3, palette: bodyPalette },
-            { minX: 0.12, maxX: 0.22, minY: 0, maxY: 0.34 - legSwing, minZ: 0.18, maxZ: 0.3, palette: bodyPalette },
-            { minX: -0.22, maxX: -0.12, minY: 0, maxY: 0.34 - legSwing, minZ: -0.28, maxZ: -0.16, palette: bodyPalette },
-            { minX: 0.12, maxX: 0.22, minY: 0, maxY: 0.34 + legSwing, minZ: -0.28, maxZ: -0.16, palette: bodyPalette }
+            { minX: -0.18, maxX: 0.18, minY: 0.31 + hurtLift, maxY: 0.6 + hurtLift, minZ: -0.5, maxZ: 0.2, palette: bodyPalette },
+            { minX: -0.17, maxX: 0.17, minY: 0.4 + hurtLift, maxY: 0.75 + hurtLift, minZ: 0.2, maxZ: 0.56, palette: bodyPalette },
+            { minX: -0.11, maxX: 0.11, minY: 0.34 + hurtLift, maxY: 0.54 + hurtLift, minZ: 0.54, maxZ: 0.72, palette: muzzlePalette },
+            { minX: -0.14, maxX: -0.04, minY: 0.72 + hurtLift, maxY: 0.88 + hurtLift, minZ: 0.42, maxZ: 0.54, palette: earPalette },
+            { minX: 0.04, maxX: 0.14, minY: 0.72 + hurtLift, maxY: 0.88 + hurtLift, minZ: 0.42, maxZ: 0.54, palette: earPalette },
+            { minX: -0.23, maxX: -0.14, minY: 0, maxY: 0.38 + legSwing, minZ: 0.28, maxZ: 0.39, palette: bodyPalette },
+            { minX: 0.14, maxX: 0.23, minY: 0, maxY: 0.38 - legSwing, minZ: 0.28, maxZ: 0.39, palette: bodyPalette },
+            { minX: -0.23, maxX: -0.14, minY: 0, maxY: 0.38 - legSwing, minZ: -0.36, maxZ: -0.25, palette: bodyPalette },
+            { minX: 0.14, maxX: 0.23, minY: 0, maxY: 0.38 + legSwing, minZ: -0.36, maxZ: -0.25, palette: bodyPalette },
+            { minX: -0.04, maxX: 0.04, minY: 0.44 + hurtLift + tailLift, maxY: 0.52 + hurtLift + tailLift, minZ: -0.78, maxZ: -0.24, palette: tailPalette }
         ];
 
         const faces = [];
         for (const part of parts) {
-            const rotatedBounds = {
-                minX: Number.POSITIVE_INFINITY,
-                maxX: Number.NEGATIVE_INFINITY,
-                minY: this.position.y + part.minY,
-                maxY: this.position.y + part.maxY,
-                minZ: Number.POSITIVE_INFINITY,
-                maxZ: Number.NEGATIVE_INFINITY
-            };
-
-            const corners = [
-                { x: part.minX, z: part.minZ },
-                { x: part.maxX, z: part.minZ },
-                { x: part.maxX, z: part.maxZ },
-                { x: part.minX, z: part.maxZ }
-            ];
-
-            for (const corner of corners) {
-                const worldX = this.position.x + corner.x * cosYaw - corner.z * sinYaw;
-                const worldZ = this.position.z + corner.x * sinYaw + corner.z * cosYaw;
-                rotatedBounds.minX = Math.min(rotatedBounds.minX, worldX);
-                rotatedBounds.maxX = Math.max(rotatedBounds.maxX, worldX);
-                rotatedBounds.minZ = Math.min(rotatedBounds.minZ, worldZ);
-                rotatedBounds.maxZ = Math.max(rotatedBounds.maxZ, worldZ);
-            }
-
-            faces.push.apply(faces, createCuboidFaces(rotatedBounds, part.palette));
+            faces.push.apply(faces, createCuboidFaces(this.position, part, part.palette));
         }
 
-        return {
+        this.cachedPoseKey = poseKey;
+        this.cachedRenderable = {
             key: this.id,
             chunkX: null,
             chunkZ: null,
             faces: faces,
-            center: { x: this.position.x, y: this.position.y + 0.45, z: this.position.z },
-            radius: 1.2
+            center: { x: this.position.x, y: this.position.y + 0.44, z: this.position.z },
+            radius: 1.04
         };
+
+        return this.cachedRenderable;
     }
 }
