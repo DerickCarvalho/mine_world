@@ -1,4 +1,4 @@
-export class FirstPersonHand {
+﻿export class FirstPersonHand {
     constructor(root) {
         this.root = root;
         this.motion = 0;
@@ -34,15 +34,15 @@ export class FirstPersonHand {
         this.show();
         const speed = movementState && Number.isFinite(movementState.speed) ? movementState.speed : 0;
         const walkFactor = Math.min(1, speed / 4.6);
-        this.motion += deltaTime * (4 + walkFactor * 8);
+        this.motion += deltaTime * (3.5 + walkFactor * 6.5);
         this.useTime = Math.max(0, this.useTime - deltaTime);
 
-        const swingX = Math.sin(this.motion) * 10 * walkFactor;
-        const swingY = Math.abs(Math.cos(this.motion * 0.9)) * 8 * walkFactor;
+        const swingX = Math.sin(this.motion) * 8 * walkFactor;
+        const swingY = Math.abs(Math.cos(this.motion * 0.82)) * 6 * walkFactor;
         const useFactor = this.useTime > 0 ? Math.sin((1 - this.useTime / 0.16) * Math.PI) : 0;
-        const useX = -20 * useFactor;
-        const useY = 20 * useFactor;
-        const rotation = -14 + swingX * 0.2 - useFactor * 16;
+        const useX = -18 * useFactor;
+        const useY = 14 * useFactor;
+        const rotation = -9 + swingX * 0.16 - useFactor * 12;
 
         this.root.style.transform = 'translate3d(' + (swingX + useX) + 'px, ' + (swingY + useY) + 'px, 0) rotate(' + rotation + 'deg)';
     }

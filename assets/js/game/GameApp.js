@@ -1,4 +1,4 @@
-import { SoftwareRenderer } from './render/SoftwareRenderer.js';
+﻿import { SoftwareRenderer } from './render/SoftwareRenderer.js';
 import { PlayerController } from './player/PlayerController.js';
 import { ChunkManager } from './world/ChunkManager.js';
 import { ChunkMesher } from './world/ChunkMesher.js';
@@ -7,10 +7,13 @@ import { TerrainGenerator } from './world/TerrainGenerator.js';
 import { MutableWorld } from './world/MutableWorld.js';
 import { RaycastPicker } from './world/RaycastPicker.js';
 import { getBlockIdByKey, getBlockKeyById, getBlockMaxStack, getBlockName, isPlaceableBlock } from './world/BlockTypes.js';
-import { normalizeRuntimeConfig } from './world/WorldConfig.js';
+import { setBlockTextureCatalog } from './world/ChunkMaterials.js';
+import { WORLD_CONFIG, normalizeRuntimeConfig } from './world/WorldConfig.js';
 import { Hotbar } from './ui/Hotbar.js';
 import { InventoryPanel } from './ui/InventoryPanel.js';
 import { FirstPersonHand } from './ui/FirstPersonHand.js';
+import { MobManager } from './entities/MobManager.js';
+import { EntityPicker } from './entities/EntityPicker.js';
 
 const SESSION_STATES = Object.freeze({
     BOOTING: 'booting',
@@ -20,8 +23,9 @@ const SESSION_STATES = Object.freeze({
     DESTROYED: 'destroyed'
 });
 
-const POINTER_LOCK_HINT = 'Clique na cena para capturar o mouse. Use WASD para andar, espaco para pular, C para coordenadas, E para inventario e P para pausa.';
+const POINTER_LOCK_HINT = 'Clique na cena para capturar o mouse. Use WASD para andar, espaco para pular, T para chat, C para coordenadas, E para inventario e P para pausa.';
 const INVENTORY_HINT = 'Inventario aberto. Clique para reorganizar os slots, use E para fechar e clique na cena para retomar o mouse.';
+const CHAT_HINT = 'Chat aberto. Digite uma mensagem ou use / para ver os comandos validados.';
 const INITIAL_CHUNK_TARGET = 12;
 const INVENTORY_SLOT_COUNT = 27;
 
@@ -64,7 +68,11 @@ export class GameApp {
         this.overlay = options.overlay;
         this.crosshair = options.crosshair;
         this.pauseMenu = options.pauseMenu;
+        this.chatOverlay = options.chatOverlay || null;
         this.repository = options.repository;
+        this.commandRepository = options.commandRepository || null;
+        this.textureManifest = options.textureManifest || {};
+        this.initialCommands = Array.isArray(options.initialCommands) ? options.initialCommands : [];
         this.initialSaveState = options.saveState || null;
         this.chunkStats = options.chunkStats || { cached_chunks_count: 0 };
         this.running = false;
@@ -72,13 +80,19 @@ export class GameApp {
         this.frameHandle = null;
         this.lastFrameTime = 0;
         this.hudElapsed = 0;
-        this.currentTarget = null;
+        this.qualityElapsed = 0;
+        this.frameTimeAccumulator = 0;
+        this.frameSampleCount = 0;
+        this.currentBlockTarget = null;
+        this.currentEntityTarget = null;
         this.inventoryOpen = false;
+        this.chatOpen = false;
         this.inventorySelectedSlotIndex = null;
         this.coordsVisible = false;
         this.chunkLoadInFlight = null;
         this.chunkSaveInFlight = null;
         this.cachedChunkCount = Number(this.chunkStats.cached_chunks_count || 0);
+        this.availableCommands = this.initialCommands.slice();
         this.inventorySlots = normalizeInventorySlots(this.initialSaveState && this.initialSaveState.inventory ? this.initialSaveState.inventory.slots : []);
         this.selectedHotbarIndex = Math.max(0, Math.min(8, Math.floor(Number(this.initialSaveState && this.initialSaveState.player ? this.initialSaveState.player.selected_hotbar_index || 0 : 0))));
         this.uiDirty = true;
@@ -101,11 +115,14 @@ export class GameApp {
         this.overlay.setTarget('Nenhum');
         this.overlay.setCoordsVisible(this.coordsVisible);
 
+        setBlockTextureCatalog(this.textureManifest);
         this.renderer = new SoftwareRenderer(this.canvas);
+        await this.renderer.setTextureCatalog(this.textureManifest);
         this.terrain = new TerrainGenerator(this.worldMeta.seed, this.worldMeta.algorithm_version);
         this.world = new MutableWorld(this.terrain);
         this.world.applySerializedMutations(this.initialSaveState && this.initialSaveState.world ? this.initialSaveState.world.block_mutations : []);
         this.raycast = new RaycastPicker(this.world);
+        this.entityPicker = new EntityPicker();
         this.chunkStore = new ChunkStore();
         this.chunkMesher = new ChunkMesher(this.world);
         this.chunkManager = new ChunkManager({
@@ -114,6 +131,7 @@ export class GameApp {
             world: this.world,
             renderDistance: this.userConfig.render_distance
         });
+        this.mobManager = new MobManager(this.world);
 
         const spawnPose = this.resolveSpawnPose(this.initialSaveState);
         this.player = new PlayerController({
@@ -133,6 +151,11 @@ export class GameApp {
         this.player.setGameplayEnabled(true);
 
         await this.prepareInitialChunks(spawnPose);
+        await this.loadAvailableCommands(false);
+
+        if (this.chatOverlay) {
+            this.chatOverlay.pushMessage('system', 'Chat pronto. Digite / para listar comandos disponiveis.');
+        }
 
         this.overlay.setCoords(this.player.getFeetPosition());
         this.overlay.hideBlocking();
@@ -141,7 +164,7 @@ export class GameApp {
         this.crosshair.hide();
         this.crosshair.setTargetActive(false);
         this.renderUi();
-        this.renderer.render(this.player.getCameraState(), this.chunkManager.getRenderableChunks(), null);
+        this.renderer.render(this.player.getCameraState(), this.chunkManager.getRenderableChunks(), null, this.mobManager.getRenderableEntities());
 
         window.addEventListener('resize', this.handleResize);
         document.addEventListener('visibilitychange', this.handleVisibilityChange);
@@ -180,8 +203,20 @@ export class GameApp {
 
             this.inventoryPanel.hide();
         }
-    }
 
+        if (this.chatOverlay) {
+            this.chatOverlay.onSubmit = (value) => {
+                void this.handleChatSubmit(value);
+            };
+            this.chatOverlay.onInputChange = (value) => {
+                this.handleChatInputChange(value);
+            };
+            this.chatOverlay.onCancel = () => {
+                this.closeChat(true);
+            };
+            this.chatOverlay.hide();
+        }
+    }
     resolveSpawnPose(saveState) {
         const proceduralSpawn = this.world.findSpawnPoint();
         const fallbackPose = {
@@ -342,6 +377,26 @@ export class GameApp {
         return appliedConfig;
     }
 
+    async loadAvailableCommands(forceRefresh) {
+        if (!this.commandRepository) {
+            return this.availableCommands;
+        }
+
+        if (!forceRefresh && this.availableCommands.length > 0) {
+            return this.availableCommands;
+        }
+
+        try {
+            this.availableCommands = await this.commandRepository.listValidated();
+        } catch (error) {
+            if (forceRefresh) {
+                throw error;
+            }
+        }
+
+        return this.availableCommands;
+    }
+
     renderUi() {
         if (this.hotbar) {
             this.hotbar.render(this.inventorySlots, this.selectedHotbarIndex);
@@ -378,6 +433,14 @@ export class GameApp {
             this.crosshair.hide();
             this.crosshair.setTargetActive(false);
             this.overlay.hideInstruction();
+            return;
+        }
+
+        if (this.chatOpen) {
+            this.crosshair.hide();
+            this.crosshair.setTargetActive(false);
+            this.overlay.showInstruction(CHAT_HINT);
+            this.overlay.setStatus('Chat aberto.');
             return;
         }
 
@@ -453,7 +516,7 @@ export class GameApp {
     }
 
     toggleInventory() {
-        if (this.sessionState !== SESSION_STATES.RUNNING) {
+        if (this.sessionState !== SESSION_STATES.RUNNING || this.chatOpen) {
             return;
         }
 
@@ -478,8 +541,166 @@ export class GameApp {
         this.crosshair.setTargetActive(false);
         this.overlay.showInstruction(INVENTORY_HINT);
         this.overlay.setStatus('Inventario aberto.');
-        this.currentTarget = null;
+        this.currentBlockTarget = null;
+        this.currentEntityTarget = null;
         this.uiDirty = true;
+    }
+
+    toggleChat() {
+        if (this.sessionState !== SESSION_STATES.RUNNING || this.inventoryOpen) {
+            return;
+        }
+
+        if (this.chatOpen) {
+            this.closeChat(true);
+            return;
+        }
+
+        this.openChat();
+    }
+
+    openChat() {
+        if (!this.chatOverlay || this.chatOpen) {
+            return;
+        }
+
+        this.chatOpen = true;
+        this.player.setGameplayEnabled(false);
+        this.player.resetTransientInput();
+        this.player.releasePointerLock();
+        this.crosshair.hide();
+        this.crosshair.setTargetActive(false);
+        this.currentBlockTarget = null;
+        this.currentEntityTarget = null;
+        this.chatOverlay.show();
+        this.chatOverlay.clearInput();
+        this.chatOverlay.setSuggestions(this.availableCommands);
+        this.overlay.showInstruction(CHAT_HINT);
+        this.overlay.setStatus('Chat aberto.');
+        void this.loadAvailableCommands(true).then(() => {
+            this.chatOverlay.setSuggestions(this.availableCommands);
+        }).catch(() => {
+            // Mantem a lista atual se a recarga falhar.
+        });
+    }
+
+    closeChat(requestPointerLock) {
+        if (!this.chatOpen) {
+            return;
+        }
+
+        this.chatOpen = false;
+        if (this.chatOverlay) {
+            this.chatOverlay.hide();
+            this.chatOverlay.clearInput();
+        }
+
+        this.player.setGameplayEnabled(true);
+        this.player.resetTransientInput();
+        this.overlay.showInstruction(POINTER_LOCK_HINT);
+        this.overlay.setStatus('Clique na cena para capturar o mouse.');
+
+        if (requestPointerLock) {
+            this.player.requestPointerLock();
+        }
+    }
+    handleChatInputChange(value) {
+        if (!this.chatOverlay) {
+            return;
+        }
+
+        const trimmed = String(value || '').trim();
+        if (!trimmed.startsWith('/')) {
+            this.chatOverlay.setSuggestions([]);
+            return;
+        }
+
+        const query = trimmed.slice(1).toLowerCase();
+        const suggestions = this.availableCommands.filter(function (command) {
+            return command.command_key.toLowerCase().startsWith(query);
+        });
+        this.chatOverlay.setSuggestions(suggestions);
+    }
+
+    async handleChatSubmit(value) {
+        if (!this.chatOverlay) {
+            return;
+        }
+
+        const text = String(value || '').trim();
+        if (text === '') {
+            this.closeChat(true);
+            return;
+        }
+
+        if (!text.startsWith('/')) {
+            this.chatOverlay.pushMessage('system', 'Voce: ' + text);
+            this.closeChat(true);
+            return;
+        }
+
+        try {
+            const message = await this.executeChatCommand(text);
+            this.chatOverlay.pushMessage('success', message);
+            this.closeChat(true);
+        } catch (error) {
+            this.chatOverlay.pushMessage('error', error && error.message ? error.message : 'Falha ao executar o comando.');
+        }
+    }
+
+    async executeChatCommand(text) {
+        const tokens = String(text || '').trim().slice(1).split(/\s+/).filter(Boolean);
+        const commandKey = (tokens.shift() || '').toLowerCase();
+        const command = this.availableCommands.find(function (entry) {
+            return entry.command_key.toLowerCase() === commandKey;
+        });
+
+        if (!command) {
+            throw new Error('Comando nao encontrado. Digite / para ver a lista atual.');
+        }
+
+        if (command.capability_key === 'teleport') {
+            return this.executeTeleportCommand(command, tokens);
+        }
+
+        throw new Error('Esse comando ainda nao possui executor no runtime.');
+    }
+
+    async executeTeleportCommand(command, args) {
+        if (args.length < 3) {
+            throw new Error(command.definition && command.definition.usage ? 'Uso: ' + command.definition.usage : 'Uso: /tp x y z');
+        }
+
+        const x = Number(args[0]);
+        const y = Number(args[1]);
+        const z = Number(args[2]);
+
+        if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+            throw new Error('Informe coordenadas numericas validas.');
+        }
+
+        if (!this.world.isInsideWorld(x, z)) {
+            throw new Error('As coordenadas informadas estao fora dos limites do mundo.');
+        }
+
+        if (y < 0 || y >= WORLD_CONFIG.height) {
+            throw new Error('A coordenada Y precisa ficar dentro da altura do mundo.');
+        }
+
+        this.overlay.setStatus('Executando /' + command.command_key + '...');
+        this.player.teleportTo({ x: x, y: y, z: z });
+        this.chunkManager.update(this.player.getFeetPosition(), true);
+        await this.loadNextChunkBatch(16);
+        this.chunkManager.drainQueue(12);
+        this.currentBlockTarget = null;
+        this.currentEntityTarget = null;
+
+        if (this.coordsVisible) {
+            this.overlay.setCoords(this.player.getFeetPosition());
+        }
+
+        this.overlay.setStatus('Teleporte executado.');
+        return 'Teleporte executado para X ' + x.toFixed(1) + ' | Y ' + y.toFixed(1) + ' | Z ' + z.toFixed(1);
     }
 
     handleInventorySlotClick(index) {
@@ -558,42 +779,56 @@ export class GameApp {
     }
 
     updateTarget() {
-        if (this.sessionState !== SESSION_STATES.RUNNING || this.inventoryOpen) {
-            this.currentTarget = null;
+        if (this.sessionState !== SESSION_STATES.RUNNING || this.inventoryOpen || this.chatOpen) {
+            this.currentBlockTarget = null;
+            this.currentEntityTarget = null;
             this.overlay.setTarget('Nenhum');
             this.crosshair.setTargetActive(false);
             return;
         }
 
-        this.currentTarget = this.raycast.pick(this.player.getCameraState());
-        if (!this.currentTarget) {
+        const cameraState = this.player.getCameraState();
+        const blockTarget = this.raycast.pick(cameraState);
+        const entityTarget = this.entityPicker.pick(cameraState, this.mobManager.getEntities());
+
+        if (entityTarget && (!blockTarget || entityTarget.distance <= blockTarget.distance)) {
+            this.currentEntityTarget = entityTarget;
+            this.currentBlockTarget = null;
+            this.overlay.setTarget(entityTarget.entity.getDisplayName() + ' | ' + (entityTarget.entity.following ? 'seguindo' : 'vagando'));
+            this.crosshair.setTargetActive(true);
+            return;
+        }
+
+        this.currentEntityTarget = null;
+        this.currentBlockTarget = blockTarget;
+        if (!blockTarget) {
             this.overlay.setTarget('Nenhum');
             this.crosshair.setTargetActive(false);
             return;
         }
 
-        this.overlay.setTarget(getBlockName(this.currentTarget.blockId) + ' | ' + this.currentTarget.distance.toFixed(1) + 'm');
+        this.overlay.setTarget(getBlockName(blockTarget.blockId) + ' | ' + blockTarget.distance.toFixed(1) + 'm');
         this.crosshair.setTargetActive(true);
     }
 
     breakTargetBlock() {
-        if (!this.currentTarget || !this.currentTarget.breakable) {
+        if (!this.currentBlockTarget || !this.currentBlockTarget.breakable) {
             return;
         }
 
-        const removedBlockId = this.world.breakBlockAt(this.currentTarget.block.x, this.currentTarget.block.y, this.currentTarget.block.z);
+        const removedBlockId = this.world.breakBlockAt(this.currentBlockTarget.block.x, this.currentBlockTarget.block.y, this.currentBlockTarget.block.z);
         if (removedBlockId === null) {
             return;
         }
 
         this.addBlockToInventory(removedBlockId);
-        this.chunkManager.markBlockDirty(this.currentTarget.block.x, this.currentTarget.block.y, this.currentTarget.block.z);
+        this.chunkManager.markBlockDirty(this.currentBlockTarget.block.x, this.currentBlockTarget.block.y, this.currentBlockTarget.block.z);
         this.hand.triggerUse();
-        this.currentTarget = null;
+        this.currentBlockTarget = null;
     }
 
     placeSelectedBlock() {
-        if (!this.currentTarget || !this.currentTarget.place) {
+        if (!this.currentBlockTarget || !this.currentBlockTarget.place) {
             return;
         }
 
@@ -607,7 +842,7 @@ export class GameApp {
             return;
         }
 
-        const placeCell = this.currentTarget.place;
+        const placeCell = this.currentBlockTarget.place;
         const placed = this.world.placeBlockAt(placeCell.x, placeCell.y, placeCell.z, blockId, this.player.getBodyAabb());
 
         if (!placed) {
@@ -617,7 +852,20 @@ export class GameApp {
         this.decrementSelectedSlot();
         this.chunkManager.markBlockDirty(placeCell.x, placeCell.y, placeCell.z);
         this.hand.triggerUse();
-        this.currentTarget = null;
+        this.currentBlockTarget = null;
+    }
+
+    toggleEntityFollow() {
+        if (!this.currentEntityTarget) {
+            return;
+        }
+
+        const result = this.mobManager.toggleFollow(this.currentEntityTarget.entity.id);
+        if (!result || !this.chatOverlay) {
+            return;
+        }
+
+        this.chatOverlay.pushMessage('system', result.following ? 'O gato agora vai seguir voce.' : 'O gato voltou a vagar normalmente.');
     }
 
     buildSaveState() {
@@ -644,6 +892,10 @@ export class GameApp {
             this.inventoryOpen = false;
             this.inventorySelectedSlotIndex = null;
             this.inventoryPanel.hide();
+        }
+
+        if (this.chatOpen) {
+            this.closeChat(false);
         }
 
         this.sessionState = SESSION_STATES.PAUSED;
@@ -685,7 +937,6 @@ export class GameApp {
             this.player.requestPointerLock();
         }
     }
-
     async saveAndExit() {
         if (this.sessionState !== SESSION_STATES.PAUSED || !this.repository) {
             return;
@@ -762,11 +1013,15 @@ export class GameApp {
             }
         }
 
+        if (actions.toggleChat && this.sessionState === SESSION_STATES.RUNNING) {
+            this.toggleChat();
+        }
+
         if (actions.toggleInventory && this.sessionState === SESSION_STATES.RUNNING) {
             this.toggleInventory();
         }
 
-        if (this.sessionState !== SESSION_STATES.RUNNING || this.inventoryOpen) {
+        if (this.sessionState !== SESSION_STATES.RUNNING || this.inventoryOpen || this.chatOpen) {
             return;
         }
 
@@ -775,7 +1030,32 @@ export class GameApp {
         }
 
         if (actions.secondaryAction) {
-            this.placeSelectedBlock();
+            if (this.currentEntityTarget) {
+                this.toggleEntityFollow();
+            } else {
+                this.placeSelectedBlock();
+            }
+        }
+    }
+
+    updateAdaptiveQuality(deltaTime) {
+        this.qualityElapsed += deltaTime;
+        this.frameTimeAccumulator += deltaTime;
+        this.frameSampleCount += 1;
+
+        if (!this.renderer || this.qualityElapsed < 1.2 || this.frameSampleCount === 0) {
+            return;
+        }
+
+        const averageFrame = this.frameTimeAccumulator / this.frameSampleCount;
+        this.qualityElapsed = 0;
+        this.frameTimeAccumulator = 0;
+        this.frameSampleCount = 0;
+
+        if (averageFrame > 0.028 && this.renderer.renderScale > 0.7) {
+            this.renderer.setRenderScale(this.renderer.renderScale - 0.1);
+        } else if (averageFrame < 0.017 && this.renderer.renderScale < 1) {
+            this.renderer.setRenderScale(this.renderer.renderScale + 0.05);
         }
     }
 
@@ -794,11 +1074,12 @@ export class GameApp {
         let chunkResult = { processed: 0, generated: 0, rebuilt: 0 };
 
         if (this.sessionState === SESSION_STATES.RUNNING) {
-            if (!this.inventoryOpen) {
+            if (!this.inventoryOpen && !this.chatOpen) {
                 this.hudElapsed += deltaTime;
                 this.player.update(deltaTime);
             }
 
+            this.mobManager.update(deltaTime, this.player.getFeetPosition());
             chunkWindowChanged = this.chunkManager.update(this.player.getFeetPosition(), false);
             chunkResult = this.chunkManager.drainQueue(this.getChunkDrainBudget(deltaTime));
 
@@ -813,13 +1094,19 @@ export class GameApp {
 
         const feetPosition = this.player.getFeetPosition();
         this.updateTarget();
+        this.updateAdaptiveQuality(deltaTime);
 
         if (this.uiDirty) {
             this.renderUi();
         }
 
-        this.hand.update(deltaTime, this.player.getMovementState(), this.sessionState === SESSION_STATES.RUNNING && !this.inventoryOpen);
-        this.renderer.render(this.player.getCameraState(), this.chunkManager.getRenderableChunks(), this.currentTarget);
+        this.hand.update(deltaTime, this.player.getMovementState(), this.sessionState === SESSION_STATES.RUNNING && !this.inventoryOpen && !this.chatOpen);
+        this.renderer.render(
+            this.player.getCameraState(),
+            this.chunkManager.getRenderableChunks(),
+            this.currentBlockTarget,
+            this.mobManager.getRenderableEntities()
+        );
 
         if (this.hudElapsed >= 0.1 || chunkWindowChanged || chunkResult.processed > 0) {
             if (this.coordsVisible) {
@@ -838,7 +1125,12 @@ export class GameApp {
         }
 
         if (this.renderer && this.player) {
-            this.renderer.render(this.player.getCameraState(), this.chunkManager.getRenderableChunks(), this.currentTarget);
+            this.renderer.render(
+                this.player.getCameraState(),
+                this.chunkManager.getRenderableChunks(),
+                this.currentBlockTarget,
+                this.mobManager.getRenderableEntities()
+            );
         }
     }
 
@@ -876,6 +1168,10 @@ export class GameApp {
 
         if (this.inventoryPanel) {
             this.inventoryPanel.hide();
+        }
+
+        if (this.chatOverlay) {
+            this.chatOverlay.hide();
         }
 
         if (this.crosshair) {

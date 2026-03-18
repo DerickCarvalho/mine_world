@@ -1,4 +1,4 @@
-import { isOpaqueBlock, BLOCK_TYPES } from './BlockTypes.js';
+﻿import { isOpaqueBlock, BLOCK_TYPES } from './BlockTypes.js';
 import { getFaceMaterial } from './ChunkMaterials.js';
 import { WORLD_CONFIG } from './WorldConfig.js';
 
@@ -20,7 +20,8 @@ function createFace(vertices, normal, material) {
         center: center,
         color: material.color,
         shade: material.shade,
-        alpha: material.alpha || 1
+        alpha: material.alpha || 1,
+        textureKey: material.textureKey || null
     };
 }
 
@@ -69,9 +70,92 @@ function shouldRenderFace(blockId, neighborId) {
     return neighborId === BLOCK_TYPES.air || !isOpaqueBlock(neighborId);
 }
 
+function emitGreedyQuads(mask, width, height, callback) {
+    for (let v = 0; v < height; v += 1) {
+        for (let u = 0; u < width; u += 1) {
+            const index = v * width + u;
+            const cell = mask[index];
+            if (!cell) {
+                continue;
+            }
+
+            if (!cell.material.mergeable || !cell.material.mergeKey) {
+                callback(u, v, 1, 1, cell);
+                mask[index] = null;
+                continue;
+            }
+
+            let quadWidth = 1;
+            while (u + quadWidth < width) {
+                const next = mask[v * width + (u + quadWidth)];
+                if (!next || !next.material.mergeable || next.material.mergeKey !== cell.material.mergeKey) {
+                    break;
+                }
+                quadWidth += 1;
+            }
+
+            let quadHeight = 1;
+            let canExpand = true;
+            while (v + quadHeight < height && canExpand) {
+                for (let offset = 0; offset < quadWidth; offset += 1) {
+                    const next = mask[(v + quadHeight) * width + (u + offset)];
+                    if (!next || !next.material.mergeable || next.material.mergeKey !== cell.material.mergeKey) {
+                        canExpand = false;
+                        break;
+                    }
+                }
+
+                if (canExpand) {
+                    quadHeight += 1;
+                }
+            }
+
+            callback(u, v, quadWidth, quadHeight, cell);
+
+            for (let clearV = 0; clearV < quadHeight; clearV += 1) {
+                for (let clearU = 0; clearU < quadWidth; clearU += 1) {
+                    mask[(v + clearV) * width + (u + clearU)] = null;
+                }
+            }
+        }
+    }
+}
+
 export class ChunkMesher {
     constructor(world) {
         this.world = world;
+    }
+
+    getDataIndex(localX, y, localZ) {
+        return y * WORLD_CONFIG.chunkSize * WORLD_CONFIG.chunkSize + localZ * WORLD_CONFIG.chunkSize + localX;
+    }
+
+    getBlockId(data, localX, y, localZ) {
+        return data[this.getDataIndex(localX, y, localZ)] || BLOCK_TYPES.air;
+    }
+
+    scanChunkBounds(data) {
+        let minY = Number.POSITIVE_INFINITY;
+        let maxY = Number.NEGATIVE_INFINITY;
+
+        for (let localX = 0; localX < WORLD_CONFIG.chunkSize; localX += 1) {
+            for (let localZ = 0; localZ < WORLD_CONFIG.chunkSize; localZ += 1) {
+                for (let y = 0; y < WORLD_CONFIG.height; y += 1) {
+                    const blockId = this.getBlockId(data, localX, y, localZ);
+                    if (blockId === BLOCK_TYPES.air) {
+                        continue;
+                    }
+
+                    minY = Math.min(minY, y);
+                    maxY = Math.max(maxY, y + 1);
+                }
+            }
+        }
+
+        return {
+            minY: minY === Number.POSITIVE_INFINITY ? 0 : minY,
+            maxY: maxY === Number.NEGATIVE_INFINITY ? 0 : maxY
+        };
     }
 
     generateChunk(chunkX, chunkZ) {
@@ -80,41 +164,16 @@ export class ChunkMesher {
         const faces = [];
         const startX = chunkX * WORLD_CONFIG.chunkSize;
         const startZ = chunkZ * WORLD_CONFIG.chunkSize;
-        let minY = Number.POSITIVE_INFINITY;
-        let maxY = Number.NEGATIVE_INFINITY;
+        const bounds = this.scanChunkBounds(data);
 
-        for (let localX = 0; localX < WORLD_CONFIG.chunkSize; localX += 1) {
-            const worldX = startX + localX;
-            if (worldX < WORLD_CONFIG.minX || worldX > WORLD_CONFIG.maxX) {
-                continue;
-            }
+        this.emitTopAndBottomFaces(faces, data, startX, startZ, 'top');
+        this.emitTopAndBottomFaces(faces, data, startX, startZ, 'bottom');
+        this.emitNorthSouthFaces(faces, data, startX, startZ, 'north');
+        this.emitNorthSouthFaces(faces, data, startX, startZ, 'south');
+        this.emitEastWestFaces(faces, data, startX, startZ, 'east');
+        this.emitEastWestFaces(faces, data, startX, startZ, 'west');
 
-            for (let localZ = 0; localZ < WORLD_CONFIG.chunkSize; localZ += 1) {
-                const worldZ = startZ + localZ;
-                if (worldZ < WORLD_CONFIG.minZ || worldZ > WORLD_CONFIG.maxZ) {
-                    continue;
-                }
-
-                for (let y = 0; y < WORLD_CONFIG.height; y += 1) {
-                    const blockId = data[y * WORLD_CONFIG.chunkSize * WORLD_CONFIG.chunkSize + localZ * WORLD_CONFIG.chunkSize + localX];
-                    if (blockId === BLOCK_TYPES.air) {
-                        continue;
-                    }
-
-                    minY = Math.min(minY, y);
-                    maxY = Math.max(maxY, y + 1);
-
-                    this.pushFace(faces, blockId, worldX, y, worldZ, 'top');
-                    this.pushFace(faces, blockId, worldX, y, worldZ, 'bottom');
-                    this.pushFace(faces, blockId, worldX, y, worldZ, 'north');
-                    this.pushFace(faces, blockId, worldX, y, worldZ, 'south');
-                    this.pushFace(faces, blockId, worldX, y, worldZ, 'east');
-                    this.pushFace(faces, blockId, worldX, y, worldZ, 'west');
-                }
-            }
-        }
-
-        const chunkGeometry = createChunkBounds(startX, startZ, minY === Number.POSITIVE_INFINITY ? 0 : minY, maxY === Number.NEGATIVE_INFINITY ? 0 : maxY);
+        const chunkGeometry = createChunkBounds(startX, startZ, bounds.minY, bounds.maxY);
 
         return {
             key: chunkX + ',' + chunkZ,
@@ -127,93 +186,198 @@ export class ChunkMesher {
         };
     }
 
-    pushFace(faces, blockId, worldX, y, worldZ, direction) {
-        const neighbor = this.getNeighbor(worldX, y, worldZ, direction);
+    emitTopAndBottomFaces(faces, data, startX, startZ, direction) {
+        const size = WORLD_CONFIG.chunkSize;
 
-        if (!shouldRenderFace(blockId, neighbor.blockId)) {
-            return;
+        for (let y = 0; y < WORLD_CONFIG.height; y += 1) {
+            const mask = new Array(size * size).fill(null);
+
+            for (let localX = 0; localX < size; localX += 1) {
+                const worldX = startX + localX;
+                if (worldX < WORLD_CONFIG.minX || worldX > WORLD_CONFIG.maxX) {
+                    continue;
+                }
+
+                for (let localZ = 0; localZ < size; localZ += 1) {
+                    const worldZ = startZ + localZ;
+                    if (worldZ < WORLD_CONFIG.minZ || worldZ > WORLD_CONFIG.maxZ) {
+                        continue;
+                    }
+
+                    const blockId = this.getBlockId(data, localX, y, localZ);
+                    if (blockId === BLOCK_TYPES.air) {
+                        continue;
+                    }
+
+                    const neighborId = direction === 'top'
+                        ? this.world.getBlockIdAtBlock(worldX, y + 1, worldZ)
+                        : this.world.getBlockIdAtBlock(worldX, y - 1, worldZ);
+
+                    if (!shouldRenderFace(blockId, neighborId)) {
+                        continue;
+                    }
+
+                    mask[localZ * size + localX] = {
+                        localX: localX,
+                        localZ: localZ,
+                        y: y,
+                        material: getFaceMaterial(blockId, direction)
+                    };
+                }
+            }
+
+            emitGreedyQuads(mask, size, size, (u, v, quadWidth, quadHeight, cell) => {
+                const worldX = startX + u;
+                const worldZ = startZ + v;
+                const planeY = direction === 'top' ? cell.y + 1 : cell.y;
+
+                if (direction === 'top') {
+                    faces.push(createFace([
+                        { x: worldX, y: planeY, z: worldZ },
+                        { x: worldX + quadWidth, y: planeY, z: worldZ },
+                        { x: worldX + quadWidth, y: planeY, z: worldZ + quadHeight },
+                        { x: worldX, y: planeY, z: worldZ + quadHeight }
+                    ], { x: 0, y: 1, z: 0 }, cell.material));
+                    return;
+                }
+
+                faces.push(createFace([
+                    { x: worldX, y: planeY, z: worldZ + quadHeight },
+                    { x: worldX + quadWidth, y: planeY, z: worldZ + quadHeight },
+                    { x: worldX + quadWidth, y: planeY, z: worldZ },
+                    { x: worldX, y: planeY, z: worldZ }
+                ], { x: 0, y: -1, z: 0 }, cell.material));
+            });
         }
-
-        const material = getFaceMaterial(blockId, direction);
-        if (direction === 'top') {
-            faces.push(createFace([
-                { x: worldX, y: y + 1, z: worldZ },
-                { x: worldX + 1, y: y + 1, z: worldZ },
-                { x: worldX + 1, y: y + 1, z: worldZ + 1 },
-                { x: worldX, y: y + 1, z: worldZ + 1 }
-            ], { x: 0, y: 1, z: 0 }, material));
-            return;
-        }
-
-        if (direction === 'bottom') {
-            faces.push(createFace([
-                { x: worldX, y: y, z: worldZ + 1 },
-                { x: worldX + 1, y: y, z: worldZ + 1 },
-                { x: worldX + 1, y: y, z: worldZ },
-                { x: worldX, y: y, z: worldZ }
-            ], { x: 0, y: -1, z: 0 }, material));
-            return;
-        }
-
-        if (direction === 'east') {
-            faces.push(createFace([
-                { x: worldX + 1, y: y, z: worldZ },
-                { x: worldX + 1, y: y + 1, z: worldZ },
-                { x: worldX + 1, y: y + 1, z: worldZ + 1 },
-                { x: worldX + 1, y: y, z: worldZ + 1 }
-            ], { x: 1, y: 0, z: 0 }, material));
-            return;
-        }
-
-        if (direction === 'west') {
-            faces.push(createFace([
-                { x: worldX, y: y, z: worldZ + 1 },
-                { x: worldX, y: y + 1, z: worldZ + 1 },
-                { x: worldX, y: y + 1, z: worldZ },
-                { x: worldX, y: y, z: worldZ }
-            ], { x: -1, y: 0, z: 0 }, material));
-            return;
-        }
-
-        if (direction === 'north') {
-            faces.push(createFace([
-                { x: worldX, y: y, z: worldZ },
-                { x: worldX + 1, y: y, z: worldZ },
-                { x: worldX + 1, y: y + 1, z: worldZ },
-                { x: worldX, y: y + 1, z: worldZ }
-            ], { x: 0, y: 0, z: -1 }, material));
-            return;
-        }
-
-        faces.push(createFace([
-            { x: worldX + 1, y: y, z: worldZ + 1 },
-            { x: worldX, y: y, z: worldZ + 1 },
-            { x: worldX, y: y + 1, z: worldZ + 1 },
-            { x: worldX + 1, y: y + 1, z: worldZ + 1 }
-        ], { x: 0, y: 0, z: 1 }, material));
     }
 
-    getNeighbor(worldX, y, worldZ, direction) {
-        if (direction === 'top') {
-            return { blockId: this.world.getBlockIdAtBlock(worldX, y + 1, worldZ) };
-        }
+    emitNorthSouthFaces(faces, data, startX, startZ, direction) {
+        const size = WORLD_CONFIG.chunkSize;
 
-        if (direction === 'bottom') {
-            return { blockId: this.world.getBlockIdAtBlock(worldX, y - 1, worldZ) };
-        }
+        for (let localZ = 0; localZ < size; localZ += 1) {
+            const worldZ = startZ + localZ;
+            if (worldZ < WORLD_CONFIG.minZ || worldZ > WORLD_CONFIG.maxZ) {
+                continue;
+            }
 
-        if (direction === 'east') {
-            return { blockId: this.world.getBlockIdAtBlock(worldX + 1, y, worldZ) };
-        }
+            const mask = new Array(size * WORLD_CONFIG.height).fill(null);
 
-        if (direction === 'west') {
-            return { blockId: this.world.getBlockIdAtBlock(worldX - 1, y, worldZ) };
-        }
+            for (let localX = 0; localX < size; localX += 1) {
+                const worldX = startX + localX;
+                if (worldX < WORLD_CONFIG.minX || worldX > WORLD_CONFIG.maxX) {
+                    continue;
+                }
 
-        if (direction === 'north') {
-            return { blockId: this.world.getBlockIdAtBlock(worldX, y, worldZ - 1) };
-        }
+                for (let y = 0; y < WORLD_CONFIG.height; y += 1) {
+                    const blockId = this.getBlockId(data, localX, y, localZ);
+                    if (blockId === BLOCK_TYPES.air) {
+                        continue;
+                    }
 
-        return { blockId: this.world.getBlockIdAtBlock(worldX, y, worldZ + 1) };
+                    const neighborId = direction === 'north'
+                        ? this.world.getBlockIdAtBlock(worldX, y, worldZ - 1)
+                        : this.world.getBlockIdAtBlock(worldX, y, worldZ + 1);
+
+                    if (!shouldRenderFace(blockId, neighborId)) {
+                        continue;
+                    }
+
+                    mask[y * size + localX] = {
+                        localX: localX,
+                        localZ: localZ,
+                        y: y,
+                        material: getFaceMaterial(blockId, direction)
+                    };
+                }
+            }
+
+            emitGreedyQuads(mask, size, WORLD_CONFIG.height, (u, v, quadWidth, quadHeight, cell) => {
+                const worldX = startX + u;
+                const planeZ = direction === 'north' ? startZ + cell.localZ : startZ + cell.localZ + 1;
+                const worldY = v;
+
+                if (direction === 'north') {
+                    faces.push(createFace([
+                        { x: worldX, y: worldY, z: planeZ },
+                        { x: worldX + quadWidth, y: worldY, z: planeZ },
+                        { x: worldX + quadWidth, y: worldY + quadHeight, z: planeZ },
+                        { x: worldX, y: worldY + quadHeight, z: planeZ }
+                    ], { x: 0, y: 0, z: -1 }, cell.material));
+                    return;
+                }
+
+                faces.push(createFace([
+                    { x: worldX + quadWidth, y: worldY, z: planeZ },
+                    { x: worldX, y: worldY, z: planeZ },
+                    { x: worldX, y: worldY + quadHeight, z: planeZ },
+                    { x: worldX + quadWidth, y: worldY + quadHeight, z: planeZ }
+                ], { x: 0, y: 0, z: 1 }, cell.material));
+            });
+        }
+    }
+
+    emitEastWestFaces(faces, data, startX, startZ, direction) {
+        const size = WORLD_CONFIG.chunkSize;
+
+        for (let localX = 0; localX < size; localX += 1) {
+            const worldX = startX + localX;
+            if (worldX < WORLD_CONFIG.minX || worldX > WORLD_CONFIG.maxX) {
+                continue;
+            }
+
+            const mask = new Array(size * WORLD_CONFIG.height).fill(null);
+
+            for (let localZ = 0; localZ < size; localZ += 1) {
+                const worldZ = startZ + localZ;
+                if (worldZ < WORLD_CONFIG.minZ || worldZ > WORLD_CONFIG.maxZ) {
+                    continue;
+                }
+
+                for (let y = 0; y < WORLD_CONFIG.height; y += 1) {
+                    const blockId = this.getBlockId(data, localX, y, localZ);
+                    if (blockId === BLOCK_TYPES.air) {
+                        continue;
+                    }
+
+                    const neighborId = direction === 'east'
+                        ? this.world.getBlockIdAtBlock(worldX + 1, y, worldZ)
+                        : this.world.getBlockIdAtBlock(worldX - 1, y, worldZ);
+
+                    if (!shouldRenderFace(blockId, neighborId)) {
+                        continue;
+                    }
+
+                    mask[y * size + localZ] = {
+                        localX: localX,
+                        localZ: localZ,
+                        y: y,
+                        material: getFaceMaterial(blockId, direction)
+                    };
+                }
+            }
+
+            emitGreedyQuads(mask, size, WORLD_CONFIG.height, (u, v, quadWidth, quadHeight, cell) => {
+                const planeX = direction === 'east' ? startX + cell.localX + 1 : startX + cell.localX;
+                const worldY = v;
+                const worldZ = startZ + u;
+
+                if (direction === 'east') {
+                    faces.push(createFace([
+                        { x: planeX, y: worldY, z: worldZ },
+                        { x: planeX, y: worldY + quadHeight, z: worldZ },
+                        { x: planeX, y: worldY + quadHeight, z: worldZ + quadWidth },
+                        { x: planeX, y: worldY, z: worldZ + quadWidth }
+                    ], { x: 1, y: 0, z: 0 }, cell.material));
+                    return;
+                }
+
+                faces.push(createFace([
+                    { x: planeX, y: worldY, z: worldZ + quadWidth },
+                    { x: planeX, y: worldY + quadHeight, z: worldZ + quadWidth },
+                    { x: planeX, y: worldY + quadHeight, z: worldZ },
+                    { x: planeX, y: worldY, z: worldZ }
+                ], { x: -1, y: 0, z: 0 }, cell.material));
+            });
+        }
     }
 }

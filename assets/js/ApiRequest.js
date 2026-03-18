@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
     class ApiRequest {
         static buildUrl(url, data, useApiBase, method) {
             const base = useApiBase === false ? window.location.origin + '/' : window.ENV.API_BASE_URL;
@@ -42,9 +42,15 @@
                 headers: headers
             };
 
+            const isFormData = typeof FormData !== 'undefined' && settings.data instanceof FormData;
+
             if (!['GET', 'HEAD'].includes(method) && settings.data !== null) {
-                headers.set('Content-Type', 'application/json; charset=UTF-8');
-                fetchOptions.body = JSON.stringify(settings.data);
+                if (isFormData) {
+                    fetchOptions.body = settings.data;
+                } else {
+                    headers.set('Content-Type', 'application/json; charset=UTF-8');
+                    fetchOptions.body = JSON.stringify(settings.data);
+                }
             }
 
             const controller = new AbortController();

@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 $requestedWorldId = (int) (filter_input(INPUT_GET, 'id_mundo', FILTER_VALIDATE_INT) ?: 0);
 ?>
@@ -25,10 +25,11 @@ $requestedWorldId = (int) (filter_input(INPUT_GET, 'id_mundo', FILTER_VALIDATE_I
         <div class="game-hud__bottom">
             <div class="game-hotbar-wrap">
                 <div class="game-hand" data-game-hand hidden aria-hidden="true">
-                    <div class="game-hand__sleeve"></div>
-                    <div class="game-hand__forearm"></div>
-                    <div class="game-hand__palm"></div>
-                    <div class="game-hand__thumb"></div>
+                    <div class="game-hand__arm">
+                        <span class="game-hand__face game-hand__face--front"></span>
+                        <span class="game-hand__face game-hand__face--side"></span>
+                        <span class="game-hand__face game-hand__face--top"></span>
+                    </div>
                 </div>
 
                 <div class="game-hotbar" data-game-hotbar aria-label="Hotbar do jogador"></div>
@@ -53,8 +54,17 @@ $requestedWorldId = (int) (filter_input(INPUT_GET, 'id_mundo', FILTER_VALIDATE_I
         </div>
     </div>
 
+    <div class="game-chat" data-game-chat hidden>
+        <div class="game-chat__history" data-chat-messages></div>
+        <div class="game-chat__suggestions" data-chat-suggestions hidden></div>
+        <form class="game-chat__form" data-chat-form novalidate>
+            <span class="game-chat__label">Chat</span>
+            <input class="game-chat__input" data-chat-input type="text" maxlength="160" autocomplete="off" placeholder="Digite uma mensagem ou /comando">
+        </form>
+    </div>
+
     <div class="game-instruction" data-overlay-instruction hidden>
-        Clique na cena para capturar o mouse. Use WASD para andar, espaco para pular, C para coordenadas, E para inventario e P para pausar.
+        Clique na cena para capturar o mouse. Use WASD para andar, espaco para pular, T para chat, C para coordenadas, E para inventario e P para pausar.
     </div>
 
     <div class="game-crosshair" data-crosshair hidden aria-hidden="true">
@@ -150,7 +160,7 @@ $requestedWorldId = (int) (filter_input(INPUT_GET, 'id_mundo', FILTER_VALIDATE_I
             <p class="game-overlay__eyebrow">MineWorld</p>
             <h1 data-overlay-title>Carregando mundo</h1>
             <p data-overlay-message>Buscando metadados, cache inicial de chunks e preparando o terreno.</p>
-            <p class="game-overlay__hint">Nesta fase o mundo usa cache persistente de chunks, coordenadas opcionais por `C` e menu contextual completo por `P`.</p>
+            <p class="game-overlay__hint">Nesta fase o mundo usa cache persistente de chunks, texturas opcionais por bloco, chat com T e menu contextual completo por P.</p>
 
             <div class="game-overlay__actions">
                 <button class="button button--primary" type="button" data-overlay-action hidden>Voltar ao lobby</button>

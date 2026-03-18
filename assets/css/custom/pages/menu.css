@@ -1,5 +1,5 @@
-.app-shell__card--menu {
-    width: min(820px, 100%);
+﻿.app-shell__card--menu {
+    width: min(860px, 100%);
     padding: 0;
     background: transparent;
     border: 0;
@@ -32,14 +32,14 @@
 
 .menu-screen__copy {
     margin: 0;
-    max-width: 38ch;
+    max-width: 42ch;
     color: var(--text-300);
     line-height: 1.7;
     font-size: 1.02rem;
 }
 
 .menu-screen__actions {
-    width: min(360px, 100%);
+    width: min(420px, 100%);
     display: grid;
     gap: 0.9rem;
     margin-top: 0.5rem;

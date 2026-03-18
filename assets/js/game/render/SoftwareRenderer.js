@@ -1,4 +1,4 @@
-import { WORLD_CONFIG, clampNumber } from '../world/WorldConfig.js';
+﻿import { WORLD_CONFIG, clampNumber } from '../world/WorldConfig.js';
 import { createCameraTransform, worldToCameraSpace } from '../core/CameraMath.js';
 
 const FOG_COLOR = { r: 166, g: 206, b: 228 };
@@ -25,6 +25,37 @@ function projectPoint(point, transform, renderer) {
     };
 }
 
+function solveAffineTransform(source, destination) {
+    const denominator = source[0].u * (source[1].v - source[2].v)
+        + source[1].u * (source[2].v - source[0].v)
+        + source[2].u * (source[0].v - source[1].v);
+
+    if (Math.abs(denominator) < 0.000001) {
+        return null;
+    }
+
+    const a = (destination[0].x * (source[1].v - source[2].v)
+        + destination[1].x * (source[2].v - source[0].v)
+        + destination[2].x * (source[0].v - source[1].v)) / denominator;
+    const b = (destination[0].y * (source[1].v - source[2].v)
+        + destination[1].y * (source[2].v - source[0].v)
+        + destination[2].y * (source[0].v - source[1].v)) / denominator;
+    const c = (destination[0].x * (source[2].u - source[1].u)
+        + destination[1].x * (source[0].u - source[2].u)
+        + destination[2].x * (source[1].u - source[0].u)) / denominator;
+    const d = (destination[0].y * (source[2].u - source[1].u)
+        + destination[1].y * (source[0].u - source[2].u)
+        + destination[2].y * (source[1].u - source[0].u)) / denominator;
+    const e = (destination[0].x * (source[1].u * source[2].v - source[2].u * source[1].v)
+        + destination[1].x * (source[2].u * source[0].v - source[0].u * source[2].v)
+        + destination[2].x * (source[0].u * source[1].v - source[1].u * source[0].v)) / denominator;
+    const f = (destination[0].y * (source[1].u * source[2].v - source[2].u * source[1].v)
+        + destination[1].y * (source[2].u * source[0].v - source[0].u * source[2].v)
+        + destination[2].y * (source[0].u * source[1].v - source[1].u * source[0].v)) / denominator;
+
+    return { a: a, b: b, c: c, d: d, e: e, f: f };
+}
+
 export class SoftwareRenderer {
     constructor(canvas) {
         this.canvas = canvas;
@@ -38,6 +69,53 @@ export class SoftwareRenderer {
         this.viewportHeight = 1;
         this.focalLength = 1;
         this.gradient = null;
+        this.renderScale = 1;
+        this.textureEntries = new Map();
+        this.resize();
+    }
+
+    setTextureCatalog(catalog) {
+        const queue = [];
+
+        Object.values(catalog || {}).forEach((faces) => {
+            ['top', 'side', 'bottom'].forEach((face) => {
+                const texture = faces && faces[face] ? faces[face] : null;
+                if (!texture || !texture.path || this.textureEntries.has(texture.path)) {
+                    return;
+                }
+
+                const image = new Image();
+                image.decoding = 'async';
+                const entry = {
+                    image: image,
+                    ready: false,
+                    failed: false
+                };
+                this.textureEntries.set(texture.path, entry);
+                queue.push(new Promise((resolve) => {
+                    image.onload = function () {
+                        entry.ready = true;
+                        resolve();
+                    };
+                    image.onerror = function () {
+                        entry.failed = true;
+                        resolve();
+                    };
+                    image.src = new URL(texture.path, window.ENV.DOMAIN + '/').toString();
+                }));
+            });
+        });
+
+        return Promise.all(queue);
+    }
+
+    setRenderScale(scale) {
+        const normalized = clampNumber(Number(scale || 1), 0.65, 1);
+        if (Math.abs(normalized - this.renderScale) < 0.01) {
+            return;
+        }
+
+        this.renderScale = normalized;
         this.resize();
     }
 
@@ -46,10 +124,12 @@ export class SoftwareRenderer {
         const width = Math.max(1, Math.round(rect.width || window.innerWidth));
         const height = Math.max(1, Math.round(rect.height || window.innerHeight));
         const pixelRatio = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
+        const internalScale = pixelRatio * this.renderScale;
 
-        this.canvas.width = Math.round(width * pixelRatio);
-        this.canvas.height = Math.round(height * pixelRatio);
-        this.context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+        this.canvas.width = Math.max(1, Math.round(width * internalScale));
+        this.canvas.height = Math.max(1, Math.round(height * internalScale));
+        this.context.setTransform(internalScale, 0, 0, internalScale, 0, 0);
+        this.context.imageSmoothingEnabled = false;
         this.viewportWidth = width;
         this.viewportHeight = height;
         this.focalLength = width / (2 * Math.tan((WORLD_CONFIG.fov * Math.PI / 180) / 2));
@@ -87,7 +167,7 @@ export class SoftwareRenderer {
             || screenY - projectedRadius > this.viewportHeight + 180);
     }
 
-    render(camera, chunks, highlight) {
+    render(camera, chunks, highlight, entities) {
         if (!camera) {
             return;
         }
@@ -96,8 +176,16 @@ export class SoftwareRenderer {
 
         const polygons = [];
         const transform = createCameraTransform(camera);
+        const renderables = [];
 
-        for (const chunk of chunks) {
+        (chunks || []).forEach(function (chunk) {
+            renderables.push(chunk);
+        });
+        (entities || []).forEach(function (entity) {
+            renderables.push(entity);
+        });
+
+        for (const chunk of renderables) {
             if (!this.isChunkVisible(transform, chunk)) {
                 continue;
             }
@@ -152,8 +240,11 @@ export class SoftwareRenderer {
                 polygons.push({
                     points: points,
                     depth: depth,
+                    fogAmount: fog,
+                    shade: face.shade,
                     fill: this.buildColor(face.color, face.shade, fog, face.alpha || 1),
-                    stroke: this.buildColor(face.color, face.shade * 0.64, fog, Math.min(1, (face.alpha || 1) * 0.95))
+                    stroke: this.buildColor(face.color, face.shade * 0.64, fog, Math.min(1, (face.alpha || 1) * 0.95)),
+                    textureKey: face.textureKey || null
                 });
             }
         }
@@ -163,8 +254,15 @@ export class SoftwareRenderer {
         });
 
         this.context.lineJoin = 'round';
+        this.context.imageSmoothingEnabled = false;
 
         for (const polygon of polygons) {
+            if (polygon.textureKey && this.textureEntries.has(polygon.textureKey) && this.textureEntries.get(polygon.textureKey).ready) {
+                this.drawTexturedQuad(polygon.points, this.textureEntries.get(polygon.textureKey).image);
+                this.applyTextureLighting(polygon.points, polygon.shade, polygon.fogAmount);
+                continue;
+            }
+
             this.context.beginPath();
             this.context.moveTo(polygon.points[0].x, polygon.points[0].y);
 
@@ -183,6 +281,76 @@ export class SoftwareRenderer {
         if (highlight && highlight.block) {
             this.drawBlockOutline(transform, highlight.block);
         }
+    }
+
+    drawTexturedQuad(points, image) {
+        if (!image || points.length < 4 || image.width <= 0 || image.height <= 0) {
+            return;
+        }
+
+        this.drawTexturedTriangle(
+            [points[0], points[1], points[3]],
+            [
+                { u: 0, v: 0 },
+                { u: image.width, v: 0 },
+                { u: 0, v: image.height }
+            ],
+            image
+        );
+        this.drawTexturedTriangle(
+            [points[1], points[2], points[3]],
+            [
+                { u: image.width, v: 0 },
+                { u: image.width, v: image.height },
+                { u: 0, v: image.height }
+            ],
+            image
+        );
+    }
+
+    drawTexturedTriangle(destination, source, image) {
+        const matrix = solveAffineTransform(source, destination);
+        if (!matrix) {
+            return;
+        }
+
+        this.context.save();
+        this.context.beginPath();
+        this.context.moveTo(destination[0].x, destination[0].y);
+        this.context.lineTo(destination[1].x, destination[1].y);
+        this.context.lineTo(destination[2].x, destination[2].y);
+        this.context.closePath();
+        this.context.clip();
+        this.context.transform(matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f);
+        this.context.drawImage(image, 0, 0);
+        this.context.restore();
+    }
+
+    applyTextureLighting(points, shade, fogAmount) {
+        this.context.save();
+        this.context.beginPath();
+        this.context.moveTo(points[0].x, points[0].y);
+
+        for (let index = 1; index < points.length; index += 1) {
+            this.context.lineTo(points[index].x, points[index].y);
+        }
+
+        this.context.closePath();
+
+        if (shade < 1) {
+            this.context.fillStyle = 'rgba(0, 0, 0, ' + ((1 - shade) * 0.72) + ')';
+            this.context.fill();
+        }
+
+        if (fogAmount > 0) {
+            this.context.fillStyle = 'rgba(' + FOG_COLOR.r + ', ' + FOG_COLOR.g + ', ' + FOG_COLOR.b + ', ' + (fogAmount * 0.9) + ')';
+            this.context.fill();
+        }
+
+        this.context.strokeStyle = 'rgba(0, 0, 0, 0.16)';
+        this.context.lineWidth = 1;
+        this.context.stroke();
+        this.context.restore();
     }
 
     drawBlockOutline(transform, block) {

@@ -35,7 +35,8 @@ Quando houver necessidade de persistencia de conta, configuracoes e mundos, a ca
 - PRD-004 implementada: locomocao alinhada a camera, controle natural do mouse, pausa com `P`, `Salvar e sair` e retomada no ultimo ponto salvo.
 - PRD-005 implementada: mao em primeira pessoa, hotbar/inventario simples, quebrar/colocar blocos, superficie com arvores/agua/areia/pedra e nevoa de distancia.
 - PRD-006 implementada: cache persistente de chunks, pre-geracao inicial, HUD contextual, configuracoes em runtime e camada de bedrock.
-- Proxima frente apos PRD-006: texturas, crafting e progressao sandbox mais completa.
+- PRD-007 implementada: sistema de texturas por bloco, CRUD de comandos, chat in-game com teleporte, primeiro mob gato e pipeline de render mais leve.
+- Proxima frente apos PRD-007: crafting, progressao sandbox mais completa e expansao do sistema de comandos.
 
 ## Regras de Produto Consolidadas
 
@@ -66,6 +67,14 @@ Quando houver necessidade de persistencia de conta, configuracoes e mundos, a ca
 - O mundo deve persistir chunks geradas e reaproveita-las em entradas futuras.
 - Ao criar um mundo novo, uma janela inicial de chunks deve ser pre-gerada antes do spawn.
 - A camada mais profunda do mapa deve ser formada por `bedrock` inquebravel.
+- O menu principal deve oferecer acesso ao CRUD de texturas e ao CRUD de comandos.
+- Cada bloco atual deve poder receber textura opcional de topo, laterais e fundo com arquivos de ate `5 KB`.
+- Na ausencia de textura cadastrada, o bloco deve continuar usando sua cor base.
+- O jogo deve oferecer chat in-game aberto por `T`.
+- Mensagens iniciadas com `/` devem ser tratadas como comandos cadastrados e validados.
+- O primeiro comando suportado via chat deve ser `teleporte`.
+- O mundo deve poder spawnar um primeiro mob gato com baixa frequencia perto do jogador em area de mata.
+- O clique direito no gato deve alternar entre seguir o jogador e voltar ao comportamento normal.
 
 ## PRDs Ativas
 
@@ -77,16 +86,16 @@ Quando houver necessidade de persistencia de conta, configuracoes e mundos, a ca
 | PRD-004 | Refino de gameplay, pausa e persistencia de mundo | Implementada | PRD-003 | Refinar locomocao e camera, reduzir travamentos, adicionar pause menu com `P`, salvar/sair e retomada no ultimo ponto salvo. |
 | PRD-005 | Loop sandbox com inventario e superficie viva | Implementada | PRD-004 | Adicionar mao em primeira pessoa, hotbar/inventario simples, quebrar/colocar blocos, enriquecer a superficie procedural e aplicar nevoa de distancia. |
 | PRD-006 | Cache de chunks, HUD contextual e refinamento in-game | Implementada | PRD-004, PRD-005 | Persistir chunks por mundo, pre-gerar a janela inicial, mover HUD tecnica para atalhos/contexto, permitir configuracoes em runtime e proteger a base com bedrock. |
+| PRD-007 | Texturas, comandos, chat e primeiro mob | Implementada | PRD-005, PRD-006 | Adicionar texturas opcionais por bloco, CRUD de comandos com validacao local, chat in-game com teleporte, primeiro gato e reducao do custo de render. |
 
 ## Fora do Escopo Atual
 
-- Sistema de texturas completo
 - Multiplayer
-- Crafting, fornalha, ferramentas e mobs
+- Crafting, fornalha e ferramentas completas
 - Conta social, recuperacao de senha e email transacional
 
 ## Backlog de Curto Prazo
 
-- Definir o sistema de texturas para blocos
-- Planejar serializacao mais eficiente para chunks grandes
+- Expandir o catalogo de comandos validaveis alem de teleporte
+- Planejar persistencia e interacoes mais ricas para mobs
 - Planejar progressao sandbox depois do primeiro loop de construcao persistente

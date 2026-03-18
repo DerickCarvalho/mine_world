@@ -1,4 +1,4 @@
-export class InputState {
+﻿export class InputState {
     constructor(targetElement) {
         this.targetElement = targetElement;
         this.forward = false;
@@ -13,6 +13,7 @@ export class InputState {
         this.pauseToggleRequested = false;
         this.coordsToggleRequested = false;
         this.inventoryToggleRequested = false;
+        this.chatToggleRequested = false;
         this.primaryActionRequested = false;
         this.secondaryActionRequested = false;
         this.hotbarIndexRequested = null;
@@ -96,6 +97,16 @@ export class InputState {
         this.jump = false;
     }
 
+    isTextEntryActive() {
+        const active = document.activeElement;
+        if (!active) {
+            return false;
+        }
+
+        const tagName = active.tagName ? active.tagName.toUpperCase() : '';
+        return tagName === 'INPUT' || tagName === 'TEXTAREA' || active.isContentEditable === true;
+    }
+
     handleClick() {
         this.requestPointerLock();
     }
@@ -143,7 +154,7 @@ export class InputState {
     }
 
     handleWheel(event) {
-        if (!this.gameplayEnabled) {
+        if (!this.gameplayEnabled || this.isTextEntryActive()) {
             return;
         }
 
@@ -155,6 +166,10 @@ export class InputState {
     }
 
     handleKeyDown(event) {
+        if (this.isTextEntryActive()) {
+            return;
+        }
+
         if (event.code === 'KeyP') {
             if (!event.repeat) {
                 this.pauseToggleRequested = true;
@@ -176,6 +191,15 @@ export class InputState {
         if (event.code === 'KeyC') {
             if (!event.repeat) {
                 this.coordsToggleRequested = true;
+            }
+
+            event.preventDefault();
+            return;
+        }
+
+        if (event.code === 'KeyT') {
+            if (!event.repeat) {
+                this.chatToggleRequested = true;
             }
 
             event.preventDefault();
@@ -211,7 +235,11 @@ export class InputState {
     }
 
     handleKeyUp(event) {
-        if (event.code === 'KeyP' || event.code === 'KeyE' || event.code === 'KeyC' || /^Digit[1-9]$/.test(event.code)) {
+        if (this.isTextEntryActive()) {
+            return;
+        }
+
+        if (event.code === 'KeyP' || event.code === 'KeyE' || event.code === 'KeyC' || event.code === 'KeyT' || /^Digit[1-9]$/.test(event.code)) {
             return;
         }
 
@@ -245,6 +273,7 @@ export class InputState {
             togglePause: this.pauseToggleRequested,
             toggleCoords: this.coordsToggleRequested,
             toggleInventory: this.inventoryToggleRequested,
+            toggleChat: this.chatToggleRequested,
             primaryAction: this.primaryActionRequested,
             secondaryAction: this.secondaryActionRequested,
             hotbarIndex: this.hotbarIndexRequested,
@@ -254,6 +283,7 @@ export class InputState {
         this.pauseToggleRequested = false;
         this.coordsToggleRequested = false;
         this.inventoryToggleRequested = false;
+        this.chatToggleRequested = false;
         this.primaryActionRequested = false;
         this.secondaryActionRequested = false;
         this.hotbarIndexRequested = null;

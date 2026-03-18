@@ -1,8 +1,10 @@
-<?php
+﻿<?php
 $allowedPages = [
     'menu',
     'mundos',
     'opcoes',
+    'texturas',
+    'comandos',
     'jogo',
 ];
 
@@ -17,6 +19,8 @@ $pageTitles = [
     'menu' => 'MineWorld - Menu',
     'mundos' => 'MineWorld - Mundos',
     'opcoes' => 'MineWorld - Opcoes',
+    'texturas' => 'MineWorld - Texturas',
+    'comandos' => 'MineWorld - Comandos',
     'jogo' => 'MineWorld - Jogo',
 ];
 

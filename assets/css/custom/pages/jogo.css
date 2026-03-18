@@ -614,3 +614,148 @@ body[data-page="jogo"]::before {
         font-size: 0.92rem;
     }
 }
+
+.game-hand {
+    right: clamp(0.35rem, 8vw, 3.1rem);
+    bottom: 0.35rem;
+    z-index: 2;
+    width: 180px;
+    height: 180px;
+    transform-origin: 82% 88%;
+    pointer-events: none;
+    perspective: 720px;
+}
+
+.game-hand__arm {
+    position: absolute;
+    right: 24px;
+    bottom: 6px;
+    width: 78px;
+    height: 126px;
+    transform-style: preserve-3d;
+    transform: rotate(18deg) rotateX(-8deg);
+}
+
+.game-hand__face {
+    position: absolute;
+    inset: 0;
+    border: 2px solid rgba(22, 24, 30, 0.46);
+    image-rendering: pixelated;
+}
+
+.game-hand__face--front {
+    background: linear-gradient(180deg, #efc899 0%, #d8a26f 100%);
+    transform: translateZ(12px);
+}
+
+.game-hand__face--side {
+    width: 24px;
+    inset: 0 auto 0 0;
+    background: linear-gradient(180deg, #d39b68 0%, #bc8558 100%);
+    transform-origin: left center;
+    transform: rotateY(90deg);
+}
+
+.game-hand__face--top {
+    height: 24px;
+    inset: 0 0 auto 0;
+    background: linear-gradient(180deg, #f6d8b1 0%, #eab985 100%);
+    transform-origin: top center;
+    transform: rotateX(-90deg);
+}
+
+.game-chat {
+    position: absolute;
+    left: 1rem;
+    bottom: 7.5rem;
+    z-index: 8;
+    width: min(520px, calc(100vw - 2rem));
+    display: grid;
+    gap: 0.55rem;
+}
+
+.game-chat__history,
+.game-chat__suggestions,
+.game-chat__form {
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(9, 15, 20, 0.82);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.24);
+}
+
+.game-chat__history,
+.game-chat__suggestions {
+    display: grid;
+    gap: 0.4rem;
+    padding: 0.75rem 0.85rem;
+}
+
+.game-chat__message {
+    font-size: 0.92rem;
+    line-height: 1.5;
+}
+
+.game-chat__message[data-type="system"] {
+    color: #ffd89b;
+}
+
+.game-chat__message[data-type="success"] {
+    color: #a7f0bf;
+}
+
+.game-chat__message[data-type="error"] {
+    color: #ffb0aa;
+}
+
+.game-chat__suggestion {
+    width: 100%;
+    padding: 0.65rem 0.75rem;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-100);
+    text-align: left;
+    cursor: pointer;
+}
+
+.game-chat__form {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.75rem;
+    align-items: center;
+    padding: 0.8rem 0.9rem;
+}
+
+.game-chat__label {
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-size: 0.74rem;
+    color: var(--text-300);
+}
+
+.game-chat__input {
+    min-width: 0;
+    background: transparent;
+    border: 0;
+    outline: none;
+    color: var(--text-100);
+}
+
+@media (max-width: 900px) {
+    .game-chat {
+        left: 0.7rem;
+        bottom: 8.8rem;
+        width: min(100%, calc(100vw - 1.4rem));
+    }
+}
+
+@media (max-width: 720px) {
+    .game-chat {
+        bottom: 6rem;
+    }
+
+    .game-hand {
+        display: none;
+    }
+}

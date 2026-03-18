@@ -1,4 +1,4 @@
-import { CollisionResolver } from './CollisionResolver.js';
+﻿import { CollisionResolver } from './CollisionResolver.js';
 import { InputState } from './InputState.js';
 import { WORLD_CONFIG, normalizeRuntimeConfig } from '../world/WorldConfig.js';
 import { clampPitch, getForwardVector, getRightVector, normalizeAngle } from '../core/CameraMath.js';
@@ -133,6 +133,16 @@ export class PlayerController {
         this.grounded = this.position.y <= supportHeight + 0.0001;
     }
 
+    teleportTo(position) {
+        this.applyPose({
+            x: position.x,
+            y: position.y,
+            z: position.z,
+            yaw: this.yaw,
+            pitch: this.pitch
+        });
+    }
+
     isPointerLocked() {
         return this.input.locked;
     }
@@ -142,6 +152,13 @@ export class PlayerController {
             x: this.position.x,
             y: this.position.y,
             z: this.position.z
+        };
+    }
+
+    getRotation() {
+        return {
+            yaw: this.yaw,
+            pitch: this.pitch
         };
     }
 
