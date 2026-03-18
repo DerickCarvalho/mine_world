@@ -1,4 +1,4 @@
-﻿function createFace(vertices, normal, color, shade, alpha) {
+function createFace(vertices, normal, color, shade, alpha) {
     const center = vertices.reduce(function (accumulator, vertex) {
         accumulator.x += vertex.x;
         accumulator.y += vertex.y;
@@ -65,6 +65,22 @@ function angleToYaw(directionX, directionZ) {
     return Math.atan2(-directionX, directionZ);
 }
 
+function tintColor(color, tint, amount) {
+    return {
+        r: Math.round(color.r + (tint.r - color.r) * amount),
+        g: Math.round(color.g + (tint.g - color.g) * amount),
+        b: Math.round(color.b + (tint.b - color.b) * amount)
+    };
+}
+
+function tintPalette(palette, tint, amount) {
+    return {
+        top: tintColor(palette.top, tint, amount),
+        side: tintColor(palette.side, tint, amount),
+        bottom: tintColor(palette.bottom, tint, amount)
+    };
+}
+
 export class CatMob {
     constructor(id, spawnPoint) {
         this.id = id;
@@ -74,15 +90,31 @@ export class CatMob {
             z: spawnPoint.z
         };
         this.following = false;
+        this.aggressive = false;
         this.wanderTarget = null;
         this.wanderTimer = 0;
         this.animationTime = Math.random() * Math.PI * 2;
+        this.hurtTime = 0;
+        this.attackCooldown = 0;
         this.yaw = 0;
         this.speed = 2.1;
+        this.chaseSpeed = 3.15;
     }
 
     getDisplayName() {
-        return 'Gato';
+        return this.aggressive ? 'Gato bravo' : 'Gato';
+    }
+
+    getBehaviorLabel() {
+        if (this.aggressive) {
+            return 'agressivo';
+        }
+
+        if (this.following) {
+            return 'seguindo';
+        }
+
+        return 'vagando';
     }
 
     getAabb() {
@@ -96,19 +128,68 @@ export class CatMob {
         };
     }
 
+    resetBehavior() {
+        this.following = false;
+        this.aggressive = false;
+        this.wanderTarget = null;
+        this.wanderTimer = 0;
+        this.attackCooldown = 0;
+    }
+
     toggleFollow() {
+        if (this.aggressive) {
+            return null;
+        }
+
         this.following = !this.following;
         this.wanderTarget = null;
         this.wanderTimer = 0;
         return this.following;
     }
 
+    takeHit(attackerPosition) {
+        this.hurtTime = 0.34;
+        this.aggressive = true;
+        this.following = false;
+        this.wanderTarget = null;
+        this.wanderTimer = 0;
+
+        if (attackerPosition) {
+            const deltaX = attackerPosition.x - this.position.x;
+            const deltaZ = attackerPosition.z - this.position.z;
+            if (Math.hypot(deltaX, deltaZ) > 0.001) {
+                this.yaw = angleToYaw(deltaX, deltaZ);
+            }
+        }
+    }
+
     update(deltaTime, playerPosition, world, isWalkable) {
-        this.animationTime += deltaTime * (this.following ? 8 : 4);
+        this.animationTime += deltaTime * (this.aggressive ? 9 : (this.following ? 7 : 4));
+        this.hurtTime = Math.max(0, this.hurtTime - deltaTime);
+        this.attackCooldown = Math.max(0, this.attackCooldown - deltaTime);
+
+        if (this.aggressive) {
+            const distance = Math.hypot(playerPosition.x - this.position.x, playerPosition.z - this.position.z);
+            if (distance <= 0.95 && this.attackCooldown <= 0) {
+                this.attackCooldown = 0.9;
+                return {
+                    type: 'player_hit',
+                    damage: 1,
+                    source: {
+                        x: this.position.x,
+                        y: this.position.y,
+                        z: this.position.z
+                    }
+                };
+            }
+
+            this.moveTowards(playerPosition.x, playerPosition.z, deltaTime, world, isWalkable, 0.7, this.chaseSpeed);
+            return null;
+        }
 
         if (this.following) {
-            this.moveTowards(playerPosition.x, playerPosition.z, deltaTime, world, isWalkable, 1.5);
-            return;
+            this.moveTowards(playerPosition.x, playerPosition.z, deltaTime, world, isWalkable, 1.5, this.speed + 0.25);
+            return null;
         }
 
         this.wanderTimer -= deltaTime;
@@ -118,17 +199,19 @@ export class CatMob {
         }
 
         if (!this.wanderTarget) {
-            return;
+            return null;
         }
 
-        const reached = this.moveTowards(this.wanderTarget.x, this.wanderTarget.z, deltaTime, world, isWalkable, 0.2);
+        const reached = this.moveTowards(this.wanderTarget.x, this.wanderTarget.z, deltaTime, world, isWalkable, 0.2, this.speed);
         if (reached) {
             this.wanderTarget = null;
         }
+
+        return null;
     }
 
     chooseWanderTarget(world, isWalkable) {
-        for (let attempt = 0; attempt < 10; attempt += 1) {
+        for (let attempt = 0; attempt < 12; attempt += 1) {
             const angle = Math.random() * Math.PI * 2;
             const distance = 2 + Math.random() * 5;
             const x = this.position.x + Math.cos(angle) * distance;
@@ -149,7 +232,7 @@ export class CatMob {
         return null;
     }
 
-    moveTowards(targetX, targetZ, deltaTime, world, isWalkable, stopDistance) {
+    moveTowards(targetX, targetZ, deltaTime, world, isWalkable, stopDistance, speed) {
         const deltaX = targetX - this.position.x;
         const deltaZ = targetZ - this.position.z;
         const distance = Math.hypot(deltaX, deltaZ);
@@ -160,7 +243,7 @@ export class CatMob {
 
         const directionX = deltaX / distance;
         const directionZ = deltaZ / distance;
-        const step = Math.min(distance, this.speed * deltaTime);
+        const step = Math.min(distance, speed * deltaTime);
         const nextX = this.position.x + directionX * step;
         const nextZ = this.position.z + directionZ * step;
         const topY = world.getTopSolidYAt(nextX, nextZ);
@@ -181,28 +264,31 @@ export class CatMob {
         const cosYaw = Math.cos(this.yaw);
         const sinYaw = Math.sin(this.yaw);
         const legSwing = Math.sin(this.animationTime) * 0.06;
-        const bodyPalette = {
+        const hurtPulse = this.hurtTime > 0 ? Math.abs(Math.sin((this.hurtTime / 0.34) * Math.PI * 5)) * 0.45 : 0;
+        const tint = this.aggressive ? { r: 214, g: 108, b: 98 } : { r: 245, g: 182, b: 116 };
+        const bodyPalette = tintPalette({
             top: { r: 212, g: 158, b: 92 },
             side: { r: 191, g: 132, b: 73 },
             bottom: { r: 150, g: 104, b: 58 }
-        };
-        const earPalette = {
+        }, tint, hurtPulse + (this.aggressive ? 0.1 : 0));
+        const earPalette = tintPalette({
             top: { r: 238, g: 187, b: 133 },
             side: { r: 216, g: 156, b: 108 },
             bottom: { r: 196, g: 140, b: 98 }
-        };
-        const tailPalette = {
+        }, tint, hurtPulse * 0.8);
+        const tailPalette = tintPalette({
             top: { r: 185, g: 128, b: 71 },
             side: { r: 170, g: 118, b: 64 },
             bottom: { r: 138, g: 94, b: 53 }
-        };
+        }, tint, hurtPulse * 0.6);
+        const hurtLift = this.hurtTime > 0 ? Math.sin((this.hurtTime / 0.34) * Math.PI * 4) * 0.04 : 0;
 
         const parts = [
-            { minX: -0.28, maxX: 0.28, minY: 0.28, maxY: 0.64, minZ: -0.42, maxZ: 0.38, palette: bodyPalette },
-            { minX: -0.2, maxX: 0.2, minY: 0.42, maxY: 0.82, minZ: 0.34, maxZ: 0.72, palette: bodyPalette },
-            { minX: -0.16, maxX: -0.03, minY: 0.76, maxY: 0.92, minZ: 0.54, maxZ: 0.68, palette: earPalette },
-            { minX: 0.03, maxX: 0.16, minY: 0.76, maxY: 0.92, minZ: 0.54, maxZ: 0.68, palette: earPalette },
-            { minX: -0.06, maxX: 0.06, minY: 0.44, maxY: 0.54, minZ: -0.7, maxZ: -0.32, palette: tailPalette },
+            { minX: -0.28, maxX: 0.28, minY: 0.28 + hurtLift, maxY: 0.64 + hurtLift, minZ: -0.42, maxZ: 0.38, palette: bodyPalette },
+            { minX: -0.2, maxX: 0.2, minY: 0.42 + hurtLift, maxY: 0.82 + hurtLift, minZ: 0.34, maxZ: 0.72, palette: bodyPalette },
+            { minX: -0.16, maxX: -0.03, minY: 0.76 + hurtLift, maxY: 0.92 + hurtLift, minZ: 0.54, maxZ: 0.68, palette: earPalette },
+            { minX: 0.03, maxX: 0.16, minY: 0.76 + hurtLift, maxY: 0.92 + hurtLift, minZ: 0.54, maxZ: 0.68, palette: earPalette },
+            { minX: -0.06, maxX: 0.06, minY: 0.44 + hurtLift, maxY: 0.54 + hurtLift, minZ: -0.7, maxZ: -0.32, palette: tailPalette },
             { minX: -0.22, maxX: -0.12, minY: 0, maxY: 0.34 + legSwing, minZ: 0.18, maxZ: 0.3, palette: bodyPalette },
             { minX: 0.12, maxX: 0.22, minY: 0, maxY: 0.34 - legSwing, minZ: 0.18, maxZ: 0.3, palette: bodyPalette },
             { minX: -0.22, maxX: -0.12, minY: 0, maxY: 0.34 - legSwing, minZ: -0.28, maxZ: -0.16, palette: bodyPalette },

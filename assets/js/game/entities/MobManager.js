@@ -1,4 +1,4 @@
-﻿import { BLOCK_TYPES } from '../world/BlockTypes.js';
+import { BLOCK_TYPES } from '../world/BlockTypes.js';
 import { CatMob } from './CatMob.js';
 
 export class MobManager {
@@ -7,7 +7,7 @@ export class MobManager {
         this.cats = [];
         this.spawnElapsed = 0;
         this.sequence = 1;
-        this.maxCats = 3;
+        this.maxCats = 5;
     }
 
     isWalkableSurface(x, z, topY) {
@@ -21,13 +21,15 @@ export class MobManager {
     }
 
     hasForestNearby(x, z) {
-        for (let offsetX = -6; offsetX <= 6; offsetX += 2) {
-            for (let offsetZ = -6; offsetZ <= 6; offsetZ += 2) {
-                for (let y = 1; y <= 8; y += 1) {
-                    const blockId = this.world.getBlockIdAtBlock(Math.floor(x) + offsetX, y + Math.floor(this.world.getTopSolidYAt(x, z) || 0), Math.floor(z) + offsetZ);
-                    if (blockId === BLOCK_TYPES.leaves || blockId === BLOCK_TYPES.wood) {
-                        return true;
-                    }
+        if (typeof this.world.getSurfaceBiome !== 'function') {
+            return true;
+        }
+
+        for (let offsetX = -8; offsetX <= 8; offsetX += 2) {
+            for (let offsetZ = -8; offsetZ <= 8; offsetZ += 2) {
+                const biome = this.world.getSurfaceBiome(x + offsetX, z + offsetZ);
+                if (biome && biome.key === 'forest') {
+                    return true;
                 }
             }
         }
@@ -36,9 +38,9 @@ export class MobManager {
     }
 
     findSpawnPointNearPlayer(playerPosition) {
-        for (let attempt = 0; attempt < 12; attempt += 1) {
+        for (let attempt = 0; attempt < 16; attempt += 1) {
             const angle = Math.random() * Math.PI * 2;
-            const distance = 8 + Math.random() * 6;
+            const distance = 6 + Math.random() * 7;
             const x = playerPosition.x + Math.cos(angle) * distance;
             const z = playerPosition.z + Math.sin(angle) * distance;
             const topY = this.world.getTopSolidYAt(x, z);
@@ -61,12 +63,23 @@ export class MobManager {
         return null;
     }
 
+    spawnCatAt(spawnPoint) {
+        if (!spawnPoint) {
+            return null;
+        }
+
+        const cat = new CatMob('cat-' + this.sequence, spawnPoint);
+        this.sequence += 1;
+        this.cats.push(cat);
+        return cat;
+    }
+
     maybeSpawnNearPlayer(playerPosition) {
         if (this.cats.length >= this.maxCats || !this.hasForestNearby(playerPosition.x, playerPosition.z)) {
             return;
         }
 
-        if (Math.floor(Math.random() * 50) !== 0) {
+        if (Math.floor(Math.random() * 5) !== 0) {
             return;
         }
 
@@ -75,25 +88,58 @@ export class MobManager {
             return;
         }
 
-        this.cats.push(new CatMob('cat-' + this.sequence, spawnPoint));
-        this.sequence += 1;
+        this.spawnCatAt(spawnPoint);
+    }
+
+    spawnCommandMob(type, playerPosition, playerRotation) {
+        const normalizedType = String(type || 'gato').trim().toLowerCase();
+        if (!['gato', 'cat'].includes(normalizedType)) {
+            return null;
+        }
+
+        const yaw = playerRotation && Number.isFinite(Number(playerRotation.yaw)) ? Number(playerRotation.yaw) : 0;
+        const candidateX = playerPosition.x - Math.sin(yaw) * 3.5;
+        const candidateZ = playerPosition.z + Math.cos(yaw) * 3.5;
+        const topY = this.world.getTopSolidYAt(candidateX, candidateZ);
+        let spawnPoint = null;
+
+        if (topY >= 0 && this.world.isInsideWorld(candidateX, candidateZ) && this.isWalkableSurface(candidateX, candidateZ, topY)) {
+            spawnPoint = {
+                x: Math.floor(candidateX) + 0.5,
+                y: topY + 1,
+                z: Math.floor(candidateZ) + 0.5
+            };
+        }
+
+        if (!spawnPoint) {
+            spawnPoint = this.findSpawnPointNearPlayer(playerPosition);
+        }
+
+        return this.spawnCatAt(spawnPoint);
     }
 
     update(deltaTime, playerPosition) {
+        const events = [];
+
         this.spawnElapsed += deltaTime;
-        if (this.spawnElapsed >= 2.4) {
+        if (this.spawnElapsed >= 2.1) {
             this.spawnElapsed = 0;
             this.maybeSpawnNearPlayer(playerPosition);
         }
 
         this.cats = this.cats.filter((cat) => {
             const distance = Math.hypot(cat.position.x - playerPosition.x, cat.position.z - playerPosition.z);
-            return distance <= 48 || cat.following;
+            return distance <= 56 || cat.following || cat.aggressive;
         });
 
         this.cats.forEach((cat) => {
-            cat.update(deltaTime, playerPosition, this.world, this.isWalkableSurface.bind(this));
+            const event = cat.update(deltaTime, playerPosition, this.world, this.isWalkableSurface.bind(this));
+            if (event) {
+                events.push(Object.assign({ entityId: cat.id }, event));
+            }
         });
+
+        return events;
     }
 
     getEntities() {
@@ -115,9 +161,41 @@ export class MobManager {
             return null;
         }
 
+        const following = cat.toggleFollow();
+        if (following === null) {
+            return {
+                entity: cat,
+                blocked: true,
+                message: 'Esse gato esta agressivo e nao vai obedecer agora.'
+            };
+        }
+
         return {
             entity: cat,
-            following: cat.toggleFollow()
+            following: following,
+            blocked: false
         };
+    }
+
+    hitEntity(entityId, attackerPosition) {
+        const cat = this.cats.find(function (entry) {
+            return entry.id === entityId;
+        });
+
+        if (!cat) {
+            return null;
+        }
+
+        cat.takeHit(attackerPosition);
+        return {
+            entity: cat,
+            aggressive: true
+        };
+    }
+
+    resetAfterRespawn() {
+        this.cats.forEach(function (cat) {
+            cat.resetBehavior();
+        });
     }
 }

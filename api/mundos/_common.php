@@ -5,17 +5,18 @@ declare(strict_types=1);
 require_once __DIR__ . '/../dependencias/auth/require_auth.php';
 require_once __DIR__ . '/../dependencias/utils.php';
 
-const WORLD_SAVE_SCHEMA_VERSION = 2;
+const WORLD_SAVE_SCHEMA_VERSION = 3;
+const WORLD_PLAYER_MAX_HEALTH = 10;
 const WORLD_INVENTORY_SLOT_COUNT = 27;
 const WORLD_HOTBAR_SLOT_COUNT = 9;
 const WORLD_MAX_STACK_SIZE = 64;
 const WORLD_MAX_MUTATIONS = 8000;
-const WORLD_MIN_X = -2500.0;
-const WORLD_MAX_X = 2499.999;
-const WORLD_MIN_Z = -2500.0;
-const WORLD_MAX_Z = 2499.999;
+const WORLD_MIN_X = -1000.0;
+const WORLD_MAX_X = 999.999;
+const WORLD_MIN_Z = -1000.0;
+const WORLD_MAX_Z = 999.999;
 const WORLD_MIN_Y = 0.0;
-const WORLD_MAX_Y = 120.0;
+const WORLD_MAX_Y = 100.0;
 const WORLD_BLOCK_MIN_Y = 0;
 const WORLD_BLOCK_MAX_Y = 99;
 const WORLD_MIN_PITCH = -1.3;
@@ -28,10 +29,10 @@ const WORLD_CHUNK_HEIGHT = 100;
 const WORLD_CHUNK_SCHEMA_VERSION = 1;
 const WORLD_MAX_CHUNK_BATCH = 64;
 const WORLD_CHUNK_DATA_BYTES = WORLD_CHUNK_SIZE * WORLD_CHUNK_SIZE * WORLD_CHUNK_HEIGHT;
-const WORLD_MIN_CHUNK_X = -157;
-const WORLD_MAX_CHUNK_X = 156;
-const WORLD_MIN_CHUNK_Z = -157;
-const WORLD_MAX_CHUNK_Z = 156;
+const WORLD_MIN_CHUNK_X = -63;
+const WORLD_MAX_CHUNK_X = 62;
+const WORLD_MIN_CHUNK_Z = -63;
+const WORLD_MAX_CHUNK_Z = 62;
 
 function world_payload(array $world): array
 {
@@ -142,6 +143,36 @@ function world_clamp(float $value, float $min, float $max): float
 function world_clamp_int(int $value, int $min, int $max): int
 {
     return max($min, min($max, $value));
+}
+
+function world_normalize_bool($value): bool
+{
+    return $value === true || $value === 1 || $value === '1';
+}
+
+function world_normalize_optional_position($value): ?array
+{
+    if (!is_array($value)) {
+        return null;
+    }
+
+    $x = world_numeric_or_null($value['x'] ?? null);
+    $y = world_numeric_or_null($value['y'] ?? null);
+    $z = world_numeric_or_null($value['z'] ?? null);
+
+    if ($x === null || $y === null || $z === null) {
+        return null;
+    }
+
+    if ($x < WORLD_MIN_X || $x > WORLD_MAX_X || $z < WORLD_MIN_Z || $z > WORLD_MAX_Z || $y < WORLD_MIN_Y || $y > WORLD_MAX_Y) {
+        return null;
+    }
+
+    return [
+        'x' => round($x, 3),
+        'y' => round($y, 3),
+        'z' => round($z, 3),
+    ];
 }
 
 function decode_world_state_payload($rawState): ?array
@@ -265,7 +296,7 @@ function normalize_world_save_state(?array $state): ?array
     }
 
     $schemaVersion = (int) ($state['schema_version'] ?? 1);
-    if ($schemaVersion !== 1 && $schemaVersion !== WORLD_SAVE_SCHEMA_VERSION) {
+    if (!in_array($schemaVersion, [1, 2, WORLD_SAVE_SCHEMA_VERSION], true)) {
         return null;
     }
 
@@ -304,6 +335,13 @@ function normalize_world_save_state(?array $state): ?array
         return null;
     }
 
+    $rawHealth = filter_var($player['health'] ?? WORLD_PLAYER_MAX_HEALTH, FILTER_VALIDATE_INT);
+    $health = $rawHealth === false ? WORLD_PLAYER_MAX_HEALTH : world_clamp_int((int) $rawHealth, 0, WORLD_PLAYER_MAX_HEALTH);
+    $dead = world_normalize_bool($player['dead'] ?? false) || $health <= 0;
+    $flyEnabled = world_normalize_bool($player['fly_enabled'] ?? false);
+    $flyActive = $flyEnabled && world_normalize_bool($player['fly_active'] ?? false);
+    $spawnPosition = world_normalize_optional_position($player['spawn_position'] ?? null);
+
     return [
         'schema_version' => WORLD_SAVE_SCHEMA_VERSION,
         'player' => [
@@ -317,6 +355,12 @@ function normalize_world_save_state(?array $state): ?array
                 'pitch' => round(world_clamp($pitch, WORLD_MIN_PITCH, WORLD_MAX_PITCH), 6),
             ],
             'selected_hotbar_index' => $selectedHotbarIndex,
+            'health' => $dead ? 0 : $health,
+            'max_health' => WORLD_PLAYER_MAX_HEALTH,
+            'dead' => $dead ? 1 : 0,
+            'fly_enabled' => $flyEnabled ? 1 : 0,
+            'fly_active' => $flyActive ? 1 : 0,
+            'spawn_position' => $spawnPosition,
         ],
         'inventory' => [
             'slots' => world_normalize_inventory_slots($inventory['slots'] ?? []),

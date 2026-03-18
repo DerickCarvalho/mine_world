@@ -1,4 +1,4 @@
-﻿export class InputState {
+export class InputState {
     constructor(targetElement) {
         this.targetElement = targetElement;
         this.forward = false;
@@ -6,6 +6,7 @@
         this.left = false;
         this.right = false;
         this.jump = false;
+        this.descend = false;
         this.lookDeltaX = 0;
         this.lookDeltaY = 0;
         this.locked = false;
@@ -16,8 +17,10 @@
         this.chatToggleRequested = false;
         this.primaryActionRequested = false;
         this.secondaryActionRequested = false;
+        this.toggleFlightRequested = false;
         this.hotbarIndexRequested = null;
         this.hotbarScrollDelta = 0;
+        this.lastSpacePressedAt = 0;
         this.onPointerLockChange = null;
 
         this.handleClick = this.handleClick.bind(this);
@@ -87,6 +90,7 @@
         this.lookDeltaY = 0;
         this.primaryActionRequested = false;
         this.secondaryActionRequested = false;
+        this.toggleFlightRequested = false;
     }
 
     resetMovement() {
@@ -95,6 +99,7 @@
         this.left = false;
         this.right = false;
         this.jump = false;
+        this.descend = false;
     }
 
     isTextEntryActive() {
@@ -228,7 +233,17 @@
             this.left = true;
         } else if (event.code === 'KeyD') {
             this.right = true;
+        } else if (event.code === 'ShiftLeft' || event.code === 'ShiftRight') {
+            this.descend = true;
         } else if (event.code === 'Space') {
+            if (!event.repeat) {
+                const now = Date.now();
+                if (now - this.lastSpacePressedAt <= 280) {
+                    this.toggleFlightRequested = true;
+                }
+                this.lastSpacePressedAt = now;
+            }
+
             this.jump = true;
             event.preventDefault();
         }
@@ -251,6 +266,8 @@
             this.left = false;
         } else if (event.code === 'KeyD') {
             this.right = false;
+        } else if (event.code === 'ShiftLeft' || event.code === 'ShiftRight') {
+            this.descend = false;
         } else if (event.code === 'Space') {
             this.jump = false;
             event.preventDefault();
@@ -276,6 +293,7 @@
             toggleChat: this.chatToggleRequested,
             primaryAction: this.primaryActionRequested,
             secondaryAction: this.secondaryActionRequested,
+            toggleFlight: this.toggleFlightRequested,
             hotbarIndex: this.hotbarIndexRequested,
             hotbarScrollDelta: this.hotbarScrollDelta
         };
@@ -286,6 +304,7 @@
         this.chatToggleRequested = false;
         this.primaryActionRequested = false;
         this.secondaryActionRequested = false;
+        this.toggleFlightRequested = false;
         this.hotbarIndexRequested = null;
         this.hotbarScrollDelta = 0;
         return actions;

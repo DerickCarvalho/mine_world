@@ -1,4 +1,4 @@
-﻿import { WORLD_CONFIG, clampNumber } from '../world/WorldConfig.js';
+import { WORLD_CONFIG, clampNumber } from '../world/WorldConfig.js';
 import { createCameraTransform, worldToCameraSpace } from '../core/CameraMath.js';
 
 const FOG_COLOR = { r: 166, g: 206, b: 228 };
@@ -56,6 +56,18 @@ function solveAffineTransform(source, destination) {
     return { a: a, b: b, c: c, d: d, e: e, f: f };
 }
 
+function polygonArea(points) {
+    let total = 0;
+
+    for (let index = 0; index < points.length; index += 1) {
+        const current = points[index];
+        const next = points[(index + 1) % points.length];
+        total += current.x * next.y - next.x * current.y;
+    }
+
+    return Math.abs(total) * 0.5;
+}
+
 export class SoftwareRenderer {
     constructor(canvas) {
         this.canvas = canvas;
@@ -70,8 +82,47 @@ export class SoftwareRenderer {
         this.focalLength = 1;
         this.gradient = null;
         this.renderScale = 1;
+        this.minRenderScale = 0.68;
         this.textureEntries = new Map();
+        this.setPerformanceProfile({});
         this.resize();
+    }
+
+    setPerformanceProfile(profile) {
+        const normalizedProfile = profile && typeof profile === 'object' ? profile : {};
+        const hardwareConcurrency = Math.max(2, Math.min(16, Math.floor(Number(normalizedProfile.hardwareConcurrency || 4))));
+        const deviceMemory = Math.max(2, Math.min(16, Number(normalizedProfile.deviceMemory || 4)));
+        const turboEnabled = normalizedProfile.turboEnabled === true;
+
+        this.textureMaxDistance = turboEnabled
+            ? (hardwareConcurrency >= 8 ? 34 : 28)
+            : (hardwareConcurrency >= 8 ? 28 : 22);
+        this.texturedPolygonBudget = turboEnabled
+            ? Math.round(hardwareConcurrency * 110 + deviceMemory * 35)
+            : Math.round(hardwareConcurrency * 70 + deviceMemory * 18);
+        this.minTexturedArea = turboEnabled ? 22 : 32;
+        this.minRenderScale = turboEnabled ? 0.58 : 0.68;
+        this.setRenderScale(this.renderScale);
+    }
+
+    prepareTextureSurface(image) {
+        const maxTextureSize = 24;
+        const largestDimension = Math.max(image.width || 1, image.height || 1);
+        const scale = largestDimension > maxTextureSize ? maxTextureSize / largestDimension : 1;
+        const width = Math.max(1, Math.round((image.width || 1) * scale));
+        const height = Math.max(1, Math.round((image.height || 1) * scale));
+        const surface = document.createElement('canvas');
+        surface.width = width;
+        surface.height = height;
+        const context = surface.getContext('2d', { alpha: true });
+
+        if (context) {
+            context.imageSmoothingEnabled = false;
+            context.clearRect(0, 0, width, height);
+            context.drawImage(image, 0, 0, width, height);
+        }
+
+        return surface;
     }
 
     setTextureCatalog(catalog) {
@@ -88,12 +139,14 @@ export class SoftwareRenderer {
                 image.decoding = 'async';
                 const entry = {
                     image: image,
+                    source: null,
                     ready: false,
                     failed: false
                 };
                 this.textureEntries.set(texture.path, entry);
                 queue.push(new Promise((resolve) => {
-                    image.onload = function () {
+                    image.onload = () => {
+                        entry.source = this.prepareTextureSurface(image);
                         entry.ready = true;
                         resolve();
                     };
@@ -110,7 +163,7 @@ export class SoftwareRenderer {
     }
 
     setRenderScale(scale) {
-        const normalized = clampNumber(Number(scale || 1), 0.65, 1);
+        const normalized = clampNumber(Number(scale || 1), this.minRenderScale, 1);
         if (Math.abs(normalized - this.renderScale) < 0.01) {
             return;
         }
@@ -199,27 +252,26 @@ export class SoftwareRenderer {
                     continue;
                 }
 
-                let allBehind = true;
                 let depthSum = 0;
                 let minX = Number.POSITIVE_INFINITY;
                 let minY = Number.POSITIVE_INFINITY;
                 let maxX = Number.NEGATIVE_INFINITY;
                 let maxY = Number.NEGATIVE_INFINITY;
                 const points = [];
+                let clipped = false;
 
                 for (const vertex of face.vertices) {
                     const cameraPoint = worldToCameraSpace(vertex, transform);
-
-                    if (cameraPoint.z > WORLD_CONFIG.nearPlane) {
-                        allBehind = false;
+                    if (cameraPoint.z <= WORLD_CONFIG.nearPlane) {
+                        clipped = true;
+                        break;
                     }
 
-                    const safeDepth = Math.max(cameraPoint.z, WORLD_CONFIG.nearPlane);
-                    const scale = this.focalLength / safeDepth;
+                    const scale = this.focalLength / cameraPoint.z;
                     const screenX = this.viewportWidth * 0.5 + cameraPoint.x * scale;
                     const screenY = this.viewportHeight * 0.5 - cameraPoint.y * scale;
 
-                    depthSum += safeDepth;
+                    depthSum += cameraPoint.z;
                     minX = Math.min(minX, screenX);
                     minY = Math.min(minY, screenY);
                     maxX = Math.max(maxX, screenX);
@@ -227,8 +279,12 @@ export class SoftwareRenderer {
                     points.push({ x: screenX, y: screenY });
                 }
 
+                if (clipped) {
+                    continue;
+                }
+
                 const depth = depthSum / face.vertices.length;
-                if (allBehind || depth > WORLD_CONFIG.farPlane) {
+                if (depth > WORLD_CONFIG.farPlane) {
                     continue;
                 }
 
@@ -236,15 +292,22 @@ export class SoftwareRenderer {
                     continue;
                 }
 
+                const area = polygonArea(points);
+                if (area < 0.5) {
+                    continue;
+                }
+
                 const fog = clampNumber((depth - 30) / (WORLD_CONFIG.farPlane - 26), 0, 1);
                 polygons.push({
                     points: points,
                     depth: depth,
+                    area: area,
                     fogAmount: fog,
                     shade: face.shade,
                     fill: this.buildColor(face.color, face.shade, fog, face.alpha || 1),
                     stroke: this.buildColor(face.color, face.shade * 0.64, fog, Math.min(1, (face.alpha || 1) * 0.95)),
-                    textureKey: face.textureKey || null
+                    textureKey: face.textureKey || null,
+                    uvs: face.uvs || null
                 });
             }
         }
@@ -256,10 +319,21 @@ export class SoftwareRenderer {
         this.context.lineJoin = 'round';
         this.context.imageSmoothingEnabled = false;
 
+        let texturedPolygons = 0;
         for (const polygon of polygons) {
-            if (polygon.textureKey && this.textureEntries.has(polygon.textureKey) && this.textureEntries.get(polygon.textureKey).ready) {
-                this.drawTexturedQuad(polygon.points, this.textureEntries.get(polygon.textureKey).image);
+            const textureEntry = polygon.textureKey ? this.textureEntries.get(polygon.textureKey) : null;
+            const canUseTexture = textureEntry
+                && textureEntry.ready
+                && textureEntry.source
+                && polygon.uvs
+                && polygon.depth <= this.textureMaxDistance
+                && polygon.area >= this.minTexturedArea
+                && texturedPolygons < this.texturedPolygonBudget;
+
+            if (canUseTexture) {
+                this.drawTexturedQuad(polygon.points, polygon.uvs, textureEntry.source);
                 this.applyTextureLighting(polygon.points, polygon.shade, polygon.fogAmount);
+                texturedPolygons += 1;
                 continue;
             }
 
@@ -283,28 +357,29 @@ export class SoftwareRenderer {
         }
     }
 
-    drawTexturedQuad(points, image) {
-        if (!image || points.length < 4 || image.width <= 0 || image.height <= 0) {
+    drawTexturedQuad(points, uvs, source) {
+        if (!source || points.length < 4 || !Array.isArray(uvs) || uvs.length < 4) {
             return;
         }
 
+        const sourceWidth = source.width || 1;
+        const sourceHeight = source.height || 1;
+        const mappedUvs = uvs.map(function (uv) {
+            return {
+                u: Number(uv.u || 0) * sourceWidth,
+                v: Number(uv.v || 0) * sourceHeight
+            };
+        });
+
         this.drawTexturedTriangle(
-            [points[0], points[1], points[3]],
-            [
-                { u: 0, v: 0 },
-                { u: image.width, v: 0 },
-                { u: 0, v: image.height }
-            ],
-            image
+            [points[0], points[1], points[2]],
+            [mappedUvs[0], mappedUvs[1], mappedUvs[2]],
+            source
         );
         this.drawTexturedTriangle(
-            [points[1], points[2], points[3]],
-            [
-                { u: image.width, v: 0 },
-                { u: image.width, v: image.height },
-                { u: 0, v: image.height }
-            ],
-            image
+            [points[0], points[2], points[3]],
+            [mappedUvs[0], mappedUvs[2], mappedUvs[3]],
+            source
         );
     }
 

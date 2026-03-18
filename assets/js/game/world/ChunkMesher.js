@@ -1,8 +1,8 @@
-﻿import { isOpaqueBlock, BLOCK_TYPES } from './BlockTypes.js';
+import { isOpaqueBlock, BLOCK_TYPES } from './BlockTypes.js';
 import { getFaceMaterial } from './ChunkMaterials.js';
 import { WORLD_CONFIG } from './WorldConfig.js';
 
-function createFace(vertices, normal, material) {
+function createFace(vertices, normal, material, uvs) {
     const center = vertices.reduce(function (accumulator, vertex) {
         accumulator.x += vertex.x;
         accumulator.y += vertex.y;
@@ -21,7 +21,8 @@ function createFace(vertices, normal, material) {
         color: material.color,
         shade: material.shade,
         alpha: material.alpha || 1,
-        textureKey: material.textureKey || null
+        textureKey: material.textureKey || null,
+        uvs: Array.isArray(uvs) ? uvs : null
     };
 }
 
@@ -119,6 +120,15 @@ function emitGreedyQuads(mask, width, height, callback) {
             }
         }
     }
+}
+
+function createFaceUvs(width, height) {
+    return [
+        { u: 0, v: 0 },
+        { u: width, v: 0 },
+        { u: width, v: height },
+        { u: 0, v: height }
+    ];
 }
 
 export class ChunkMesher {
@@ -230,23 +240,14 @@ export class ChunkMesher {
                 const worldX = startX + u;
                 const worldZ = startZ + v;
                 const planeY = direction === 'top' ? cell.y + 1 : cell.y;
-
-                if (direction === 'top') {
-                    faces.push(createFace([
-                        { x: worldX, y: planeY, z: worldZ },
-                        { x: worldX + quadWidth, y: planeY, z: worldZ },
-                        { x: worldX + quadWidth, y: planeY, z: worldZ + quadHeight },
-                        { x: worldX, y: planeY, z: worldZ + quadHeight }
-                    ], { x: 0, y: 1, z: 0 }, cell.material));
-                    return;
-                }
+                const uvs = createFaceUvs(quadWidth, quadHeight);
 
                 faces.push(createFace([
-                    { x: worldX, y: planeY, z: worldZ + quadHeight },
-                    { x: worldX + quadWidth, y: planeY, z: worldZ + quadHeight },
+                    { x: worldX, y: planeY, z: worldZ },
                     { x: worldX + quadWidth, y: planeY, z: worldZ },
-                    { x: worldX, y: planeY, z: worldZ }
-                ], { x: 0, y: -1, z: 0 }, cell.material));
+                    { x: worldX + quadWidth, y: planeY, z: worldZ + quadHeight },
+                    { x: worldX, y: planeY, z: worldZ + quadHeight }
+                ], { x: 0, y: direction === 'top' ? 1 : -1, z: 0 }, cell.material, uvs));
             });
         }
     }
@@ -295,23 +296,24 @@ export class ChunkMesher {
                 const worldX = startX + u;
                 const planeZ = direction === 'north' ? startZ + cell.localZ : startZ + cell.localZ + 1;
                 const worldY = v;
+                const uvs = createFaceUvs(quadWidth, quadHeight);
 
                 if (direction === 'north') {
                     faces.push(createFace([
-                        { x: worldX, y: worldY, z: planeZ },
-                        { x: worldX + quadWidth, y: worldY, z: planeZ },
+                        { x: worldX, y: worldY + quadHeight, z: planeZ },
                         { x: worldX + quadWidth, y: worldY + quadHeight, z: planeZ },
-                        { x: worldX, y: worldY + quadHeight, z: planeZ }
-                    ], { x: 0, y: 0, z: -1 }, cell.material));
+                        { x: worldX + quadWidth, y: worldY, z: planeZ },
+                        { x: worldX, y: worldY, z: planeZ }
+                    ], { x: 0, y: 0, z: -1 }, cell.material, uvs));
                     return;
                 }
 
                 faces.push(createFace([
-                    { x: worldX + quadWidth, y: worldY, z: planeZ },
-                    { x: worldX, y: worldY, z: planeZ },
+                    { x: worldX + quadWidth, y: worldY + quadHeight, z: planeZ },
                     { x: worldX, y: worldY + quadHeight, z: planeZ },
-                    { x: worldX + quadWidth, y: worldY + quadHeight, z: planeZ }
-                ], { x: 0, y: 0, z: 1 }, cell.material));
+                    { x: worldX, y: worldY, z: planeZ },
+                    { x: worldX + quadWidth, y: worldY, z: planeZ }
+                ], { x: 0, y: 0, z: 1 }, cell.material, uvs));
             });
         }
     }
@@ -360,23 +362,24 @@ export class ChunkMesher {
                 const planeX = direction === 'east' ? startX + cell.localX + 1 : startX + cell.localX;
                 const worldY = v;
                 const worldZ = startZ + u;
+                const uvs = createFaceUvs(quadWidth, quadHeight);
 
                 if (direction === 'east') {
                     faces.push(createFace([
-                        { x: planeX, y: worldY, z: worldZ },
                         { x: planeX, y: worldY + quadHeight, z: worldZ },
                         { x: planeX, y: worldY + quadHeight, z: worldZ + quadWidth },
-                        { x: planeX, y: worldY, z: worldZ + quadWidth }
-                    ], { x: 1, y: 0, z: 0 }, cell.material));
+                        { x: planeX, y: worldY, z: worldZ + quadWidth },
+                        { x: planeX, y: worldY, z: worldZ }
+                    ], { x: 1, y: 0, z: 0 }, cell.material, uvs));
                     return;
                 }
 
                 faces.push(createFace([
-                    { x: planeX, y: worldY, z: worldZ + quadWidth },
                     { x: planeX, y: worldY + quadHeight, z: worldZ + quadWidth },
                     { x: planeX, y: worldY + quadHeight, z: worldZ },
-                    { x: planeX, y: worldY, z: worldZ }
-                ], { x: -1, y: 0, z: 0 }, cell.material));
+                    { x: planeX, y: worldY, z: worldZ },
+                    { x: planeX, y: worldY, z: worldZ + quadWidth }
+                ], { x: -1, y: 0, z: 0 }, cell.material, uvs));
             });
         }
     }

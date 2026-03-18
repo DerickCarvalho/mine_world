@@ -25,21 +25,17 @@ function normalize_command_text_for_match(string $value): string
 {
     $normalized = function_exists('mb_strtolower') ? mb_strtolower($value, 'UTF-8') : strtolower($value);
 
-    return strtr($normalized, [
-        'a' => 'a',
-        'á' => 'a',
-        'à' => 'a',
-        'ã' => 'a',
-        'â' => 'a',
-        'é' => 'e',
-        'ê' => 'e',
-        'í' => 'i',
-        'ó' => 'o',
-        'ô' => 'o',
-        'õ' => 'o',
-        'ú' => 'u',
-        'ç' => 'c',
-    ]);
+    if (function_exists('iconv')) {
+        $ascii = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $normalized);
+        if (is_string($ascii) && $ascii !== '') {
+            $normalized = $ascii;
+        }
+    }
+
+    $normalized = preg_replace('/[^a-z0-9\s_\/]+/', ' ', $normalized) ?? '';
+    $normalized = preg_replace('/\s+/', ' ', trim($normalized)) ?? '';
+
+    return $normalized;
 }
 
 function command_capability_catalog(): array
@@ -49,6 +45,7 @@ function command_capability_catalog(): array
             'label' => 'Teleporte',
             'hint' => 'Teletransporta o jogador para as coordenadas informadas.',
             'usage_pattern' => '/%s x y z',
+            'aliases' => ['tp', 'teleport', 'teleporte'],
             'keywords' => [
                 'teleport',
                 'teletransport',
@@ -57,8 +54,51 @@ function command_capability_catalog(): array
                 'mover instantaneamente',
                 'transportar para coordenadas',
             ],
+            'arguments' => [
+                ['name' => 'x', 'type' => 'number'],
+                ['name' => 'y', 'type' => 'number'],
+                ['name' => 'z', 'type' => 'number'],
+            ],
+        ],
+        'toggle_fly' => [
+            'label' => 'Alternar Fly',
+            'hint' => 'Ativa ou desativa a permissao de voo por duplo espaco.',
+            'usage_pattern' => '/%s',
+            'aliases' => ['fly', 'voar'],
+            'keywords' => [
+                'fly',
+                'voar',
+                'habilitar voo',
+                'desabilitar voo',
+                'alternar voo',
+                'permitir voar',
+            ],
+            'arguments' => [],
+        ],
+        'spawn_mob' => [
+            'label' => 'Spawn de Mob',
+            'hint' => 'Cria um mob suportado perto do jogador. No momento apenas gato.',
+            'usage_pattern' => '/%s gato',
+            'aliases' => ['spawnmob', 'summon', 'spawncat'],
+            'keywords' => [
+                'spawn mob',
+                'spawnar mob',
+                'invocar mob',
+                'criar mob',
+                'spawnar gato',
+                'invocar gato',
+                'criar gato',
+            ],
+            'arguments' => [
+                ['name' => 'mob', 'type' => 'string', 'enum' => ['gato']],
+            ],
         ],
     ];
+}
+
+function command_key_matches(string $commandKey, array $aliases): bool
+{
+    return in_array($commandKey, $aliases, true);
 }
 
 function evaluate_command_request(string $commandKey, string $description, string $label): array
@@ -67,8 +107,23 @@ function evaluate_command_request(string $commandKey, string $description, strin
     $catalog = command_capability_catalog();
 
     foreach ($catalog as $capabilityKey => $capability) {
+        if (command_key_matches($commandKey, $capability['aliases'])) {
+            return [
+                'possible' => true,
+                'capability_key' => $capabilityKey,
+                'validation_status' => 'validated',
+                'validation_reason' => 'Descricao compativel com uma capacidade suportada pelo runtime atual.',
+                'definition' => [
+                    'usage' => sprintf($capability['usage_pattern'], $commandKey),
+                    'hint' => $capability['hint'],
+                    'arguments' => $capability['arguments'],
+                ],
+                'label' => $label !== '' ? $label : $capability['label'],
+            ];
+        }
+
         foreach ($capability['keywords'] as $keyword) {
-            if (str_contains($normalizedDescription, $keyword) || $commandKey === 'tp') {
+            if (str_contains($normalizedDescription, $keyword)) {
                 return [
                     'possible' => true,
                     'capability_key' => $capabilityKey,
@@ -77,11 +132,7 @@ function evaluate_command_request(string $commandKey, string $description, strin
                     'definition' => [
                         'usage' => sprintf($capability['usage_pattern'], $commandKey),
                         'hint' => $capability['hint'],
-                        'arguments' => [
-                            ['name' => 'x', 'type' => 'number'],
-                            ['name' => 'y', 'type' => 'number'],
-                            ['name' => 'z', 'type' => 'number'],
-                        ],
+                        'arguments' => $capability['arguments'],
                     ],
                     'label' => $label !== '' ? $label : $capability['label'],
                 ];
@@ -91,7 +142,7 @@ function evaluate_command_request(string $commandKey, string $description, strin
 
     return [
         'possible' => false,
-        'capability_key' => null,
+        'capability_key' => '',
         'validation_status' => 'unsupported',
         'validation_reason' => 'Ainda nao existe executor para a descricao informada neste momento.',
         'definition' => null,

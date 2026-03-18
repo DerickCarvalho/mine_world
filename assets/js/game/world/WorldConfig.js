@@ -1,23 +1,27 @@
 export const WORLD_CONFIG = Object.freeze({
-    width: 5000,
-    depth: 5000,
+    width: 2000,
+    depth: 2000,
     height: 100,
-    minSurfaceHeight: 3,
+    minSurfaceHeight: 4,
     maxSurfaceHeight: 84,
     chunkSize: 16,
-    minX: -2500,
-    maxX: 2499,
-    minZ: -2500,
-    maxZ: 2499,
+    minX: -1000,
+    maxX: 999,
+    minZ: -1000,
+    maxZ: 999,
     playerHeight: 1.72,
     playerRadius: 0.32,
     stepHeight: 0.65,
     baseMoveSpeed: 5.4,
+    flightMoveSpeed: 6.2,
+    flightVerticalSpeed: 5.4,
     jumpVelocity: 8.2,
     gravity: 24,
+    maxHealth: 10,
+    fallDamageStart: 4,
     fov: 78,
-    nearPlane: 0.08,
-    farPlane: 220
+    nearPlane: 0.1,
+    farPlane: 190
 });
 
 export const DEFAULT_USER_CONFIG = Object.freeze({

@@ -1,4 +1,4 @@
-﻿import { GameApp } from '../game/GameApp.js';
+import { GameApp } from '../game/GameApp.js';
 import { WorldRepository } from '../game/services/WorldRepository.js';
 import { WorldPrebuilder } from '../game/services/WorldPrebuilder.js';
 import { TextureRepository } from '../game/services/TextureRepository.js';
@@ -29,6 +29,35 @@ function readWorldId(root) {
     return Number.isInteger(parsed) ? parsed : 0;
 }
 
+function resolvePerformanceProfile() {
+    const storageKey = 'mineworld-performance-mode';
+    let storedMode = null;
+
+    try {
+        storedMode = window.localStorage.getItem(storageKey);
+    } catch (error) {
+        storedMode = null;
+    }
+
+    if (storedMode !== 'turbo' && storedMode !== 'balanced') {
+        const turboEnabled = window.confirm('Ativar modo desempenho do MineWorld? Isso aumenta o processamento local, reduz custo das texturas distantes e melhora a fluidez em maquinas mais fortes.');
+        storedMode = turboEnabled ? 'turbo' : 'balanced';
+
+        try {
+            window.localStorage.setItem(storageKey, storedMode);
+        } catch (error) {
+            // Ignora navegadores sem armazenamento disponivel.
+        }
+    }
+
+    return {
+        mode: storedMode,
+        turboEnabled: storedMode === 'turbo',
+        hardwareConcurrency: Math.max(2, Math.floor(Number(navigator.hardwareConcurrency || 4))),
+        deviceMemory: Math.max(2, Number(navigator.deviceMemory || 4))
+    };
+}
+
 async function bootstrapGame(root, overlay, crosshair, pauseMenu, chatOverlay) {
     const worldId = readWorldId(root);
 
@@ -47,6 +76,7 @@ async function bootstrapGame(root, overlay, crosshair, pauseMenu, chatOverlay) {
     const repository = new WorldRepository();
     const textureRepository = new TextureRepository();
     const commandRepository = new CommandRepository();
+    const performanceProfile = resolvePerformanceProfile();
     overlay.showLoading('Carregando mundo', 'Buscando metadados, configuracoes, comandos e texturas do runtime.');
 
     try {
@@ -64,8 +94,8 @@ async function bootstrapGame(root, overlay, crosshair, pauseMenu, chatOverlay) {
             repository: repository,
             worldMeta: gameContext.world,
             saveState: gameContext.saveState,
-            radius: 2,
-            batchSize: 8,
+            radius: performanceProfile.turboEnabled ? 3 : 2,
+            batchSize: performanceProfile.turboEnabled ? 10 : 8,
             onProgress: function (title, message) {
                 overlay.showLoading(title, message);
             }
@@ -90,6 +120,7 @@ async function bootstrapGame(root, overlay, crosshair, pauseMenu, chatOverlay) {
             textureManifest: textureManifest,
             initialCommands: initialCommands,
             commandRepository: commandRepository,
+            performanceProfile: performanceProfile,
             overlay: overlay,
             crosshair: crosshair,
             pauseMenu: pauseMenu,

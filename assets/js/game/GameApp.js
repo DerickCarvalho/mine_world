@@ -1,4 +1,4 @@
-﻿import { SoftwareRenderer } from './render/SoftwareRenderer.js';
+import { SoftwareRenderer } from './render/SoftwareRenderer.js';
 import { PlayerController } from './player/PlayerController.js';
 import { ChunkManager } from './world/ChunkManager.js';
 import { ChunkMesher } from './world/ChunkMesher.js';
@@ -14,11 +14,14 @@ import { InventoryPanel } from './ui/InventoryPanel.js';
 import { FirstPersonHand } from './ui/FirstPersonHand.js';
 import { MobManager } from './entities/MobManager.js';
 import { EntityPicker } from './entities/EntityPicker.js';
+import { GameAudio } from './audio/GameAudio.js';
 
 const SESSION_STATES = Object.freeze({
     BOOTING: 'booting',
     RUNNING: 'running',
     PAUSED: 'paused',
+    DYING: 'dying',
+    DEAD: 'dead',
     SAVING: 'saving',
     DESTROYED: 'destroyed'
 });
@@ -59,6 +62,38 @@ function normalizeInventorySlots(slots) {
     return normalized;
 }
 
+function normalizeBooleanFlag(value) {
+    return value === true || value === 1 || value === '1';
+}
+
+function normalizeHealthValue(value) {
+    const numeric = Math.floor(Number(value));
+    if (!Number.isFinite(numeric)) {
+        return WORLD_CONFIG.maxHealth;
+    }
+
+    return Math.max(0, Math.min(WORLD_CONFIG.maxHealth, numeric));
+}
+
+function normalizeSavedPosition(position) {
+    if (!position || typeof position !== 'object') {
+        return null;
+    }
+
+    const x = Number(position.x);
+    const y = Number(position.y);
+    const z = Number(position.z);
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+        return null;
+    }
+
+    return {
+        x: Number(x.toFixed(3)),
+        y: Number(y.toFixed(3)),
+        z: Number(z.toFixed(3))
+    };
+}
+
 export class GameApp {
     constructor(options) {
         this.root = options.root;
@@ -75,6 +110,7 @@ export class GameApp {
         this.initialCommands = Array.isArray(options.initialCommands) ? options.initialCommands : [];
         this.initialSaveState = options.saveState || null;
         this.chunkStats = options.chunkStats || { cached_chunks_count: 0 };
+        this.performanceProfile = options.performanceProfile || {};
         this.running = false;
         this.sessionState = SESSION_STATES.BOOTING;
         this.frameHandle = null;
@@ -83,6 +119,8 @@ export class GameApp {
         this.qualityElapsed = 0;
         this.frameTimeAccumulator = 0;
         this.frameSampleCount = 0;
+        this.healthFlashTime = 0;
+        this.deathElapsed = 0;
         this.currentBlockTarget = null;
         this.currentEntityTarget = null;
         this.inventoryOpen = false;
@@ -95,11 +133,27 @@ export class GameApp {
         this.availableCommands = this.initialCommands.slice();
         this.inventorySlots = normalizeInventorySlots(this.initialSaveState && this.initialSaveState.inventory ? this.initialSaveState.inventory.slots : []);
         this.selectedHotbarIndex = Math.max(0, Math.min(8, Math.floor(Number(this.initialSaveState && this.initialSaveState.player ? this.initialSaveState.player.selected_hotbar_index || 0 : 0))));
+        const savedPlayer = this.initialSaveState && this.initialSaveState.player ? this.initialSaveState.player : {};
+        this.health = normalizeHealthValue(savedPlayer.health);
+        this.dead = normalizeBooleanFlag(savedPlayer.dead) || this.health <= 0;
+        if (this.dead) {
+            this.health = 0;
+        }
+        this.spawnPosition = normalizeSavedPosition(savedPlayer.spawn_position);
         this.uiDirty = true;
 
         this.hotbar = new Hotbar(this.root.querySelector('[data-game-hotbar]'));
         this.inventoryPanel = new InventoryPanel(this.root.querySelector('[data-game-inventory]'));
         this.hand = new FirstPersonHand(this.root.querySelector('[data-game-hand]'));
+        this.audio = new GameAudio(this.userConfig.master_volume);
+        this.healthBar = this.root.querySelector('[data-game-health]');
+        this.healthText = this.root.querySelector('[data-game-health-text]');
+        this.flyChip = this.root.querySelector('[data-game-fly]');
+        this.flyText = this.root.querySelector('[data-game-fly-text]');
+        this.deathOverlay = this.root.querySelector('[data-game-death]');
+        this.deathCard = this.root.querySelector('[data-game-death-card]');
+        this.deathRespawnButton = this.root.querySelector('[data-death-respawn]');
+        this.deathSaveExitButton = this.root.querySelector('[data-death-save-exit]');
 
         this.handleResize = this.handleResize.bind(this);
         this.handleVisibilityChange = this.handleVisibilityChange.bind(this);
@@ -117,6 +171,7 @@ export class GameApp {
 
         setBlockTextureCatalog(this.textureManifest);
         this.renderer = new SoftwareRenderer(this.canvas);
+        this.renderer.setPerformanceProfile(this.performanceProfile);
         await this.renderer.setTextureCatalog(this.textureManifest);
         this.terrain = new TerrainGenerator(this.worldMeta.seed, this.worldMeta.algorithm_version);
         this.world = new MutableWorld(this.terrain);
@@ -133,34 +188,38 @@ export class GameApp {
         });
         this.mobManager = new MobManager(this.world);
 
+        this.worldSpawnPose = this.resolveWorldSpawnPose();
+        this.spawnPosition = this.resolveSpawnAnchor(this.initialSaveState);
+        const savedPlayer = this.initialSaveState && this.initialSaveState.player ? this.initialSaveState.player : {};
         const spawnPose = this.resolveSpawnPose(this.initialSaveState);
         this.player = new PlayerController({
             world: this.world,
             canvas: this.canvas,
             config: this.userConfig,
-            spawn: spawnPose
+            spawn: spawnPose,
+            flyEnabled: normalizeBooleanFlag(savedPlayer.fly_enabled),
+            flying: normalizeBooleanFlag(savedPlayer.fly_active)
         });
 
         this.configureUi();
-
         this.player.onPointerLockChange = (locked) => {
             this.handlePointerLockChange(locked);
         };
-
         this.player.attach();
-        this.player.setGameplayEnabled(true);
+        this.player.setGameplayEnabled(!this.dead);
 
         await this.prepareInitialChunks(spawnPose);
         await this.loadAvailableCommands(false);
 
         if (this.chatOverlay) {
             this.chatOverlay.pushMessage('system', 'Chat pronto. Digite / para listar comandos disponiveis.');
+            if (this.performanceProfile.turboEnabled) {
+                this.chatOverlay.pushMessage('system', 'Modo desempenho ativo para priorizar fluidez e texturas proximas.');
+            }
         }
 
         this.overlay.setCoords(this.player.getFeetPosition());
         this.overlay.hideBlocking();
-        this.overlay.showInstruction(POINTER_LOCK_HINT);
-        this.overlay.setStatus('Clique na cena para capturar o mouse.');
         this.crosshair.hide();
         this.crosshair.setTargetActive(false);
         this.renderUi();
@@ -173,6 +232,14 @@ export class GameApp {
         this.sessionState = SESSION_STATES.RUNNING;
         this.lastFrameTime = performance.now();
         this.frameHandle = window.requestAnimationFrame(this.loop);
+
+        if (this.dead) {
+            this.enterDeathMenu(true);
+            return;
+        }
+
+        this.overlay.showInstruction(POINTER_LOCK_HINT);
+        this.overlay.setStatus('Clique na cena para capturar o mouse.');
     }
 
     configureUi() {
@@ -180,11 +247,9 @@ export class GameApp {
             this.pauseMenu.onResume = () => {
                 this.resume(true);
             };
-
             this.pauseMenu.onSaveAndExit = () => {
                 void this.saveAndExit();
             };
-
             this.pauseMenu.onApplySettings = (config) => this.applySettingsFromPause(config);
             this.pauseMenu.setConfig(this.userConfig);
             this.pauseMenu.hide();
@@ -200,7 +265,6 @@ export class GameApp {
             this.inventoryPanel.onSlotClick = (index) => {
                 this.handleInventorySlotClick(index);
             };
-
             this.inventoryPanel.hide();
         }
 
@@ -216,17 +280,37 @@ export class GameApp {
             };
             this.chatOverlay.hide();
         }
-    }
-    resolveSpawnPose(saveState) {
-        const proceduralSpawn = this.world.findSpawnPoint();
-        const fallbackPose = {
-            x: proceduralSpawn.x,
-            y: proceduralSpawn.y,
-            z: proceduralSpawn.z,
-            yaw: 0,
-            pitch: -0.12
-        };
 
+        if (this.deathRespawnButton) {
+            this.deathRespawnButton.addEventListener('click', () => {
+                void this.respawnAfterDeath();
+            });
+        }
+
+        if (this.deathSaveExitButton) {
+            this.deathSaveExitButton.addEventListener('click', () => {
+                void this.saveAndExitFromDeath();
+            });
+        }
+    }
+
+    resolveWorldSpawnPose() {
+        const spawn = this.world.findSpawnPoint();
+        return { x: spawn.x, y: spawn.y, z: spawn.z, yaw: 0, pitch: -0.12 };
+    }
+
+    resolveSpawnAnchor(saveState) {
+        const savedPlayer = saveState && saveState.player ? saveState.player : null;
+        const savedAnchor = savedPlayer ? normalizeSavedPosition(savedPlayer.spawn_position) : null;
+        if (savedAnchor && this.world.isInsideWorld(savedAnchor.x, savedAnchor.z)) {
+            return savedAnchor;
+        }
+
+        return { x: this.worldSpawnPose.x, y: this.worldSpawnPose.y, z: this.worldSpawnPose.z };
+    }
+
+    resolveSpawnPose(saveState) {
+        const fallbackPose = Object.assign({}, this.worldSpawnPose);
         if (!saveState || !saveState.player || !saveState.player.position || !saveState.player.rotation) {
             return fallbackPose;
         }
@@ -248,14 +332,7 @@ export class GameApp {
         }
 
         const supportHeight = this.world.getTopSolidYAt(x, z) + 1;
-
-        return {
-            x: x,
-            y: Math.max(y, supportHeight),
-            z: z,
-            yaw: yaw,
-            pitch: pitch
-        };
+        return { x: x, y: Math.max(y, supportHeight), z: z, yaw: yaw, pitch: pitch };
     }
 
     async prepareInitialChunks(spawnPose) {
@@ -264,13 +341,11 @@ export class GameApp {
 
         let guard = 0;
         while (this.chunkManager.getLoadedChunkCount() < INITIAL_CHUNK_TARGET && this.chunkManager.getPendingCount() > 0 && guard < 24) {
-            await this.loadNextChunkBatch(10);
-            const result = this.chunkManager.drainQueue(8);
-
+            await this.loadNextChunkBatch(this.performanceProfile.turboEnabled ? 12 : 10);
+            const result = this.chunkManager.drainQueue(this.performanceProfile.turboEnabled ? 10 : 8);
             if (result.processed === 0 && this.chunkManager.getPendingCount() === 0) {
                 break;
             }
-
             await this.flushPendingChunkSaves(true);
             guard += 1;
         }
@@ -317,7 +392,6 @@ export class GameApp {
             if (forceWait) {
                 await this.chunkSaveInFlight;
             }
-
             return true;
         }
 
@@ -334,7 +408,6 @@ export class GameApp {
             })
             .catch((error) => {
                 this.chunkManager.requeueSaveBatch(batch);
-
                 if (forceWait) {
                     throw error;
                 }
@@ -352,6 +425,7 @@ export class GameApp {
 
     applyRuntimeConfig(config) {
         this.userConfig = normalizeRuntimeConfig(config);
+        this.audio.setVolume(this.userConfig.master_volume);
 
         if (this.player) {
             this.player.applyConfig(this.userConfig);
@@ -359,7 +433,6 @@ export class GameApp {
 
         if (this.chunkManager) {
             this.chunkManager.setRenderDistance(this.userConfig.render_distance);
-
             if (this.player) {
                 this.chunkManager.update(this.player.getFeetPosition(), true);
                 void this.loadNextChunkBatch(10);
@@ -397,18 +470,50 @@ export class GameApp {
         return this.availableCommands;
     }
 
+    renderHealthBar() {
+        if (!this.healthBar) {
+            return;
+        }
+
+        const recentIndex = this.health > 0 ? this.health - 1 : -1;
+        this.healthBar.innerHTML = new Array(WORLD_CONFIG.maxHealth).fill(null).map((_, index) => {
+            const active = index < this.health;
+            const recent = active && this.healthFlashTime > 0 && index === recentIndex;
+            return '<span class="game-vitals__segment' + (active ? ' is-active' : '') + (recent ? ' is-recent' : '') + '"></span>';
+        }).join('');
+
+        if (this.healthText) {
+            this.healthText.textContent = this.health + '/' + WORLD_CONFIG.maxHealth;
+        }
+    }
+
+    renderFlightIndicator() {
+        if (!this.flyChip || !this.flyText || !this.player) {
+            return;
+        }
+
+        let state = 'off';
+        let text = 'OFF';
+        if (this.player.isFlyEnabled()) {
+            state = this.player.isFlying() ? 'active' : 'on';
+            text = this.player.isFlying() ? 'ATIVO' : 'ON';
+        }
+
+        this.flyChip.dataset.state = state;
+        this.flyText.textContent = text;
+    }
+
     renderUi() {
         if (this.hotbar) {
             this.hotbar.render(this.inventorySlots, this.selectedHotbarIndex);
         }
-
         if (this.inventoryPanel) {
             this.inventoryPanel.render(this.inventorySlots, this.inventorySelectedSlotIndex, this.selectedHotbarIndex);
         }
-
+        this.renderHealthBar();
+        this.renderFlightIndicator();
         this.uiDirty = false;
     }
-
     updatePauseMenuData() {
         if (!this.pauseMenu || !this.player) {
             return;
@@ -417,7 +522,7 @@ export class GameApp {
         this.pauseMenu.setWorldData({
             name: this.worldMeta.nome || 'Mundo',
             seed: this.worldMeta.seed || '-',
-            algorithmVersion: this.worldMeta.algorithm_version || 'v1',
+            algorithmVersion: this.worldMeta.algorithm_version || 'v2',
             loadedChunks: this.chunkManager ? this.chunkManager.getLoadedChunkCount() : 0,
             cachedChunks: this.cachedChunkCount,
             position: this.player.getFeetPosition()
@@ -426,6 +531,13 @@ export class GameApp {
 
     handlePointerLockChange(locked) {
         if (!this.overlay || !this.crosshair) {
+            return;
+        }
+
+        if (this.sessionState === SESSION_STATES.DEAD || this.sessionState === SESSION_STATES.DYING || this.sessionState === SESSION_STATES.SAVING) {
+            this.crosshair.hide();
+            this.crosshair.setTargetActive(false);
+            this.overlay.hideInstruction();
             return;
         }
 
@@ -466,15 +578,21 @@ export class GameApp {
     }
 
     getChunkDrainBudget(deltaTime) {
+        let budget = 2;
         if (deltaTime > 0.024) {
-            return 1;
+            budget = 1;
+        } else if (this.chunkManager.getPendingCount() > 18 && deltaTime < 0.014) {
+            budget = 3;
         }
 
-        if (this.chunkManager.getPendingCount() > 18 && deltaTime < 0.014) {
-            return 3;
+        if (this.performanceProfile.turboEnabled) {
+            budget += 1;
+        }
+        if (Number(this.performanceProfile.hardwareConcurrency || 0) >= 12 && deltaTime < 0.016) {
+            budget += 1;
         }
 
-        return 2;
+        return Math.max(1, Math.min(5, budget));
     }
 
     setSelectedHotbarIndex(index) {
@@ -494,13 +612,8 @@ export class GameApp {
 
         let nextIndex = this.selectedHotbarIndex;
         const steps = Math.abs(delta);
-
         for (let index = 0; index < steps; index += 1) {
-            if (delta > 0) {
-                nextIndex = (nextIndex + 1) % 9;
-            } else {
-                nextIndex = (nextIndex + 8) % 9;
-            }
+            nextIndex = delta > 0 ? (nextIndex + 1) % 9 : (nextIndex + 8) % 9;
         }
 
         this.setSelectedHotbarIndex(nextIndex);
@@ -509,14 +622,13 @@ export class GameApp {
     toggleCoords() {
         this.coordsVisible = !this.coordsVisible;
         this.overlay.setCoordsVisible(this.coordsVisible);
-
         if (this.coordsVisible && this.player) {
             this.overlay.setCoords(this.player.getFeetPosition());
         }
     }
 
     toggleInventory() {
-        if (this.sessionState !== SESSION_STATES.RUNNING || this.chatOpen) {
+        if (this.sessionState !== SESSION_STATES.RUNNING || this.chatOpen || this.dead) {
             return;
         }
 
@@ -547,7 +659,7 @@ export class GameApp {
     }
 
     toggleChat() {
-        if (this.sessionState !== SESSION_STATES.RUNNING || this.inventoryOpen) {
+        if (this.sessionState !== SESSION_STATES.RUNNING || this.inventoryOpen || this.dead) {
             return;
         }
 
@@ -599,11 +711,11 @@ export class GameApp {
         this.player.resetTransientInput();
         this.overlay.showInstruction(POINTER_LOCK_HINT);
         this.overlay.setStatus('Clique na cena para capturar o mouse.');
-
         if (requestPointerLock) {
             this.player.requestPointerLock();
         }
     }
+
     handleChatInputChange(value) {
         if (!this.chatOverlay) {
             return;
@@ -662,6 +774,12 @@ export class GameApp {
         if (command.capability_key === 'teleport') {
             return this.executeTeleportCommand(command, tokens);
         }
+        if (command.capability_key === 'toggle_fly') {
+            return this.executeToggleFlyCommand(command);
+        }
+        if (command.capability_key === 'spawn_mob') {
+            return this.executeSpawnMobCommand(command, tokens);
+        }
 
         throw new Error('Esse comando ainda nao possui executor no runtime.');
     }
@@ -678,11 +796,9 @@ export class GameApp {
         if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
             throw new Error('Informe coordenadas numericas validas.');
         }
-
         if (!this.world.isInsideWorld(x, z)) {
             throw new Error('As coordenadas informadas estao fora dos limites do mundo.');
         }
-
         if (y < 0 || y >= WORLD_CONFIG.height) {
             throw new Error('A coordenada Y precisa ficar dentro da altura do mundo.');
         }
@@ -694,15 +810,33 @@ export class GameApp {
         this.chunkManager.drainQueue(12);
         this.currentBlockTarget = null;
         this.currentEntityTarget = null;
-
         if (this.coordsVisible) {
             this.overlay.setCoords(this.player.getFeetPosition());
         }
-
         this.overlay.setStatus('Teleporte executado.');
         return 'Teleporte executado para X ' + x.toFixed(1) + ' | Y ' + y.toFixed(1) + ' | Z ' + z.toFixed(1);
     }
 
+    async executeToggleFlyCommand(command) {
+        const nextEnabled = !this.player.isFlyEnabled();
+        this.player.setFlyEnabled(nextEnabled);
+        this.uiDirty = true;
+        this.overlay.setStatus('Executando /' + command.command_key + '...');
+        return nextEnabled
+            ? 'Fly habilitado. Use duplo espaco para entrar no voo e Shift para descer.'
+            : 'Fly desativado.';
+    }
+
+    async executeSpawnMobCommand(command, args) {
+        const mobType = (args[0] || 'gato').toLowerCase();
+        const created = this.mobManager.spawnCommandMob(mobType, this.player.getFeetPosition(), this.player.getRotation());
+        if (!created) {
+            throw new Error(command.definition && command.definition.usage ? 'Uso: ' + command.definition.usage : 'Uso: /spawnmob gato');
+        }
+
+        this.overlay.setStatus('Executando /' + command.command_key + '...');
+        return 'Um gato apareceu perto do jogador.';
+    }
     handleInventorySlotClick(index) {
         if (!this.inventoryOpen) {
             return;
@@ -740,7 +874,6 @@ export class GameApp {
 
         const blockKey = getBlockKeyById(blockId);
         const maxStack = getBlockMaxStack(blockId);
-
         for (let index = 0; index < this.inventorySlots.length; index += 1) {
             const slot = this.inventorySlots[index];
             if (slot && slot.block_id === blockKey && slot.quantity < maxStack) {
@@ -752,10 +885,7 @@ export class GameApp {
 
         for (let index = 0; index < this.inventorySlots.length; index += 1) {
             if (!this.inventorySlots[index]) {
-                this.inventorySlots[index] = {
-                    block_id: blockKey,
-                    quantity: 1
-                };
+                this.inventorySlots[index] = { block_id: blockKey, quantity: 1 };
                 this.uiDirty = true;
                 return true;
             }
@@ -774,12 +904,11 @@ export class GameApp {
         if (slot.quantity <= 0) {
             this.inventorySlots[this.selectedHotbarIndex] = null;
         }
-
         this.uiDirty = true;
     }
 
     updateTarget() {
-        if (this.sessionState !== SESSION_STATES.RUNNING || this.inventoryOpen || this.chatOpen) {
+        if (this.sessionState !== SESSION_STATES.RUNNING || this.inventoryOpen || this.chatOpen || this.dead) {
             this.currentBlockTarget = null;
             this.currentEntityTarget = null;
             this.overlay.setTarget('Nenhum');
@@ -794,7 +923,7 @@ export class GameApp {
         if (entityTarget && (!blockTarget || entityTarget.distance <= blockTarget.distance)) {
             this.currentEntityTarget = entityTarget;
             this.currentBlockTarget = null;
-            this.overlay.setTarget(entityTarget.entity.getDisplayName() + ' | ' + (entityTarget.entity.following ? 'seguindo' : 'vagando'));
+            this.overlay.setTarget(entityTarget.entity.getDisplayName() + ' | ' + entityTarget.entity.getBehaviorLabel());
             this.crosshair.setTargetActive(true);
             return;
         }
@@ -827,6 +956,23 @@ export class GameApp {
         this.currentBlockTarget = null;
     }
 
+    attackTargetEntity() {
+        if (!this.currentEntityTarget) {
+            return;
+        }
+
+        const result = this.mobManager.hitEntity(this.currentEntityTarget.entity.id, this.player.getFeetPosition());
+        if (!result) {
+            return;
+        }
+
+        this.hand.triggerUse();
+        this.overlay.setStatus('O gato ficou agressivo.');
+        if (this.chatOverlay) {
+            this.chatOverlay.pushMessage('system', 'Voce acertou o gato. Agora ele vai atras de voce.');
+        }
+    }
+
     placeSelectedBlock() {
         if (!this.currentBlockTarget || !this.currentBlockTarget.place) {
             return;
@@ -844,7 +990,6 @@ export class GameApp {
 
         const placeCell = this.currentBlockTarget.place;
         const placed = this.world.placeBlockAt(placeCell.x, placeCell.y, placeCell.z, blockId, this.player.getBodyAabb());
-
         if (!placed) {
             return;
         }
@@ -865,14 +1010,207 @@ export class GameApp {
             return;
         }
 
+        if (result.blocked) {
+            this.chatOverlay.pushMessage('system', result.message || 'Esse mob nao pode obedecer agora.');
+            return;
+        }
+
         this.chatOverlay.pushMessage('system', result.following ? 'O gato agora vai seguir voce.' : 'O gato voltou a vagar normalmente.');
     }
 
+    handlePlayerEvents(events) {
+        if (!Array.isArray(events)) {
+            return;
+        }
+
+        events.forEach((event) => {
+            if (!event || event.type !== 'fall_damage') {
+                return;
+            }
+
+            const damage = Math.max(1, Math.floor(Number(event.distance || 0)) - (WORLD_CONFIG.fallDamageStart - 1));
+            this.applyDamage(damage, 'queda', null);
+        });
+    }
+
+    handleMobEvents(events) {
+        if (!Array.isArray(events)) {
+            return;
+        }
+
+        events.forEach((event) => {
+            if (!event || event.type !== 'player_hit') {
+                return;
+            }
+
+            this.applyDamage(Number(event.damage || 1), 'gato', event.source || null);
+        });
+    }
+
+    applyDamage(amount, cause, sourcePosition) {
+        if (this.sessionState === SESSION_STATES.DYING || this.sessionState === SESSION_STATES.DEAD || this.sessionState === SESSION_STATES.SAVING) {
+            return;
+        }
+
+        const damage = Math.max(1, Math.floor(Number(amount || 0)));
+        this.health = Math.max(0, this.health - damage);
+        this.healthFlashTime = 0.32;
+        this.uiDirty = true;
+        this.audio.playDamage();
+
+        if (sourcePosition) {
+            this.player.applyKnockback(sourcePosition);
+        }
+
+        if (cause === 'queda') {
+            this.overlay.setStatus('Voce sofreu dano de queda.');
+        } else if (cause === 'gato') {
+            this.overlay.setStatus('O gato acertou voce.');
+        } else {
+            this.overlay.setStatus('Voce sofreu dano.');
+        }
+
+        if (this.health <= 0) {
+            this.beginDeathSequence();
+        }
+    }
+
+    showDeathOverlay(ready) {
+        if (!this.deathOverlay) {
+            return;
+        }
+
+        this.deathOverlay.hidden = false;
+        this.deathOverlay.classList.add('is-visible');
+        if (this.deathCard) {
+            this.deathCard.hidden = false;
+        }
+
+        if (ready) {
+            this.deathOverlay.classList.add('is-ready');
+        } else {
+            this.deathOverlay.classList.remove('is-ready');
+        }
+    }
+
+    hideDeathOverlay() {
+        if (!this.deathOverlay) {
+            return;
+        }
+
+        this.deathOverlay.hidden = true;
+        this.deathOverlay.classList.remove('is-visible');
+        this.deathOverlay.classList.remove('is-ready');
+        if (this.deathCard) {
+            this.deathCard.hidden = true;
+        }
+    }
+
+    beginDeathSequence() {
+        this.dead = true;
+        this.health = 0;
+        this.sessionState = SESSION_STATES.DYING;
+        this.deathElapsed = 0;
+        this.uiDirty = true;
+
+        if (this.inventoryOpen) {
+            this.inventoryOpen = false;
+            this.inventorySelectedSlotIndex = null;
+            this.inventoryPanel.hide();
+        }
+        if (this.chatOpen) {
+            this.closeChat(false);
+        }
+
+        this.player.setGameplayEnabled(false);
+        this.player.resetTransientInput();
+        this.player.releasePointerLock();
+        this.crosshair.hide();
+        this.crosshair.setTargetActive(false);
+        this.currentBlockTarget = null;
+        this.currentEntityTarget = null;
+        this.overlay.hideInstruction();
+        this.overlay.setStatus('Voce morreu.');
+        this.showDeathOverlay(false);
+    }
+
+    enterDeathMenu(immediate) {
+        this.dead = true;
+        this.health = 0;
+        this.sessionState = SESSION_STATES.DEAD;
+        this.deathElapsed = immediate ? 1 : 0;
+        this.uiDirty = true;
+        this.player.setGameplayEnabled(false);
+        this.player.resetTransientInput();
+        this.player.releasePointerLock();
+        this.crosshair.hide();
+        this.crosshair.setTargetActive(false);
+        this.currentBlockTarget = null;
+        this.currentEntityTarget = null;
+        this.overlay.hideInstruction();
+        this.overlay.setStatus('Voce morreu.');
+        this.showDeathOverlay(true);
+    }
+    updateDeathState(deltaTime) {
+        if (this.sessionState !== SESSION_STATES.DYING) {
+            return;
+        }
+
+        this.deathElapsed += deltaTime;
+        if (this.deathElapsed >= 1) {
+            this.sessionState = SESSION_STATES.DEAD;
+            this.showDeathOverlay(true);
+        }
+    }
+
+    async respawnAfterDeath() {
+        if (this.sessionState !== SESSION_STATES.DEAD) {
+            return;
+        }
+
+        this.dead = false;
+        this.health = WORLD_CONFIG.maxHealth;
+        this.inventorySlots = createEmptyInventorySlots();
+        this.selectedHotbarIndex = 0;
+        this.inventorySelectedSlotIndex = null;
+        this.hideDeathOverlay();
+        this.mobManager.resetAfterRespawn();
+
+        if (this.player.isFlying()) {
+            this.player.toggleFlightMode();
+        }
+
+        this.player.teleportTo(this.worldSpawnPose);
+        this.chunkManager.update(this.player.getFeetPosition(), true);
+        await this.loadNextChunkBatch(16);
+        this.chunkManager.drainQueue(12);
+
+        this.sessionState = SESSION_STATES.RUNNING;
+        this.player.setGameplayEnabled(true);
+        this.player.resetTransientInput();
+        this.overlay.showInstruction(POINTER_LOCK_HINT);
+        this.overlay.setStatus('Clique na cena para capturar o mouse.');
+        if (this.coordsVisible) {
+            this.overlay.setCoords(this.player.getFeetPosition());
+        }
+        this.uiDirty = true;
+        this.player.requestPointerLock();
+    }
+
     buildSaveState() {
+        const pose = this.player.getSavePose();
         return {
-            schema_version: 2,
-            player: Object.assign({}, this.player.getSavePose(), {
-                selected_hotbar_index: this.selectedHotbarIndex
+            schema_version: 3,
+            player: Object.assign({}, pose, {
+                selected_hotbar_index: this.selectedHotbarIndex,
+                health: this.health,
+                max_health: WORLD_CONFIG.maxHealth,
+                dead: this.dead ? 1 : 0,
+                spawn_position: this.spawnPosition || {
+                    x: Number(this.worldSpawnPose.x.toFixed(3)),
+                    y: Number(this.worldSpawnPose.y.toFixed(3)),
+                    z: Number(this.worldSpawnPose.z.toFixed(3))
+                }
             }),
             inventory: {
                 slots: cloneInventorySlots(this.inventorySlots)
@@ -884,7 +1222,7 @@ export class GameApp {
     }
 
     pause() {
-        if (this.sessionState !== SESSION_STATES.RUNNING) {
+        if (this.sessionState !== SESSION_STATES.RUNNING || this.dead) {
             return;
         }
 
@@ -893,7 +1231,6 @@ export class GameApp {
             this.inventorySelectedSlotIndex = null;
             this.inventoryPanel.hide();
         }
-
         if (this.chatOpen) {
             this.closeChat(false);
         }
@@ -932,26 +1269,40 @@ export class GameApp {
         this.overlay.showInstruction(POINTER_LOCK_HINT);
         this.crosshair.hide();
         this.crosshair.setTargetActive(false);
-
         if (requestPointerLock) {
             this.player.requestPointerLock();
         }
     }
+
     async saveAndExit() {
         if (this.sessionState !== SESSION_STATES.PAUSED || !this.repository) {
             return;
         }
 
+        await this.persistWorldAndExit('Salvando mundo e saindo...', SESSION_STATES.PAUSED);
+    }
+
+    async saveAndExitFromDeath() {
+        if (this.sessionState !== SESSION_STATES.DEAD || !this.repository) {
+            return;
+        }
+
+        await this.persistWorldAndExit('Salvando estado de morte e retornando ao menu...', SESSION_STATES.DEAD);
+    }
+
+    async persistWorldAndExit(statusMessage, returnState) {
         this.sessionState = SESSION_STATES.SAVING;
         this.player.setGameplayEnabled(false);
         this.player.resetTransientInput();
         this.player.releasePointerLock();
         this.overlay.hideInstruction();
-        this.overlay.setStatus('Salvando mundo e saindo...');
+        this.overlay.setStatus(statusMessage);
+        this.crosshair.hide();
+        this.crosshair.setTargetActive(false);
 
-        if (this.pauseMenu) {
-            this.pauseMenu.show('Salvando mundo e retornando ao menu principal.');
-            this.pauseMenu.setSaving(true, 'Salvando mundo e retornando ao menu principal.');
+        if (this.pauseMenu && returnState === SESSION_STATES.PAUSED) {
+            this.pauseMenu.show(statusMessage);
+            this.pauseMenu.setSaving(true, statusMessage);
         }
 
         try {
@@ -961,11 +1312,9 @@ export class GameApp {
             while (settleGuard < 8 && this.chunkManager.getPendingCount() > 0) {
                 await this.loadNextChunkBatch(16);
                 const drained = this.chunkManager.drainQueue(16);
-
                 if (drained.processed === 0) {
                     break;
                 }
-
                 settleGuard += 1;
             }
 
@@ -983,24 +1332,27 @@ export class GameApp {
             this.destroy();
             window.location.href = window.ENV.DOMAIN + '/index.php?page=menu';
         } catch (error) {
-            this.sessionState = SESSION_STATES.PAUSED;
             this.overlay.setStatus('Falha ao salvar o mundo.');
 
-            if (this.pauseMenu) {
-                this.pauseMenu.setSaving(false, error && error.message ? error.message : 'Nao foi possivel salvar o estado do mundo.');
+            if (returnState === SESSION_STATES.PAUSED) {
+                this.sessionState = SESSION_STATES.PAUSED;
+                if (this.pauseMenu) {
+                    this.pauseMenu.setSaving(false, error && error.message ? error.message : 'Nao foi possivel salvar o estado do mundo.');
+                }
+                return;
             }
+
+            this.sessionState = SESSION_STATES.DEAD;
+            this.showDeathOverlay(true);
         }
     }
-
     handleRuntimeActions(actions) {
         if (actions.hotbarIndex !== null && actions.hotbarIndex !== undefined) {
             this.setSelectedHotbarIndex(actions.hotbarIndex);
         }
-
         if (actions.hotbarScrollDelta) {
             this.shiftHotbarSelection(actions.hotbarScrollDelta);
         }
-
         if (actions.toggleCoords) {
             this.toggleCoords();
         }
@@ -1016,17 +1368,25 @@ export class GameApp {
         if (actions.toggleChat && this.sessionState === SESSION_STATES.RUNNING) {
             this.toggleChat();
         }
-
         if (actions.toggleInventory && this.sessionState === SESSION_STATES.RUNNING) {
             this.toggleInventory();
         }
+        if (actions.toggleFlight && this.sessionState === SESSION_STATES.RUNNING && !this.inventoryOpen && !this.chatOpen && this.player.isFlyEnabled()) {
+            const flying = this.player.toggleFlightMode();
+            this.overlay.setStatus(flying ? 'Voo ativo.' : 'Voo desativado.');
+            this.uiDirty = true;
+        }
 
-        if (this.sessionState !== SESSION_STATES.RUNNING || this.inventoryOpen || this.chatOpen) {
+        if (this.sessionState !== SESSION_STATES.RUNNING || this.inventoryOpen || this.chatOpen || this.dead) {
             return;
         }
 
         if (actions.primaryAction) {
-            this.breakTargetBlock();
+            if (this.currentEntityTarget) {
+                this.attackTargetEntity();
+            } else {
+                this.breakTargetBlock();
+            }
         }
 
         if (actions.secondaryAction) {
@@ -1052,7 +1412,7 @@ export class GameApp {
         this.frameTimeAccumulator = 0;
         this.frameSampleCount = 0;
 
-        if (averageFrame > 0.028 && this.renderer.renderScale > 0.7) {
+        if (averageFrame > 0.028 && this.renderer.renderScale > this.renderer.minRenderScale + 0.02) {
             this.renderer.setRenderScale(this.renderer.renderScale - 0.1);
         } else if (averageFrame < 0.017 && this.renderer.renderScale < 1) {
             this.renderer.setRenderScale(this.renderer.renderScale + 0.05);
@@ -1070,26 +1430,34 @@ export class GameApp {
         const actions = this.player ? this.player.consumeInputActions() : {};
         this.handleRuntimeActions(actions);
 
+        const previousFlash = this.healthFlashTime;
+        this.healthFlashTime = Math.max(0, this.healthFlashTime - deltaTime);
+        if ((previousFlash > 0 && this.healthFlashTime === 0) || (previousFlash === 0 && this.healthFlashTime > 0)) {
+            this.uiDirty = true;
+        }
+
         let chunkWindowChanged = false;
         let chunkResult = { processed: 0, generated: 0, rebuilt: 0 };
 
         if (this.sessionState === SESSION_STATES.RUNNING) {
             if (!this.inventoryOpen && !this.chatOpen) {
                 this.hudElapsed += deltaTime;
-                this.player.update(deltaTime);
+                this.handlePlayerEvents(this.player.update(deltaTime));
             }
 
-            this.mobManager.update(deltaTime, this.player.getFeetPosition());
+            this.handleMobEvents(this.mobManager.update(deltaTime, this.player.getFeetPosition()));
             chunkWindowChanged = this.chunkManager.update(this.player.getFeetPosition(), false);
             chunkResult = this.chunkManager.drainQueue(this.getChunkDrainBudget(deltaTime));
 
             if (chunkWindowChanged || this.chunkManager.getPendingCount() > 0) {
-                void this.loadNextChunkBatch(8);
+                void this.loadNextChunkBatch(this.performanceProfile.turboEnabled ? 10 : 8);
             }
 
             if (chunkResult.generated > 0 || chunkResult.rebuilt > 0 || this.chunkManager.getPendingSaveCount() > 0) {
                 void this.flushPendingChunkSaves(false);
             }
+        } else if (this.sessionState === SESSION_STATES.DYING) {
+            this.updateDeathState(deltaTime);
         }
 
         const feetPosition = this.player.getFeetPosition();
@@ -1100,7 +1468,7 @@ export class GameApp {
             this.renderUi();
         }
 
-        this.hand.update(deltaTime, this.player.getMovementState(), this.sessionState === SESSION_STATES.RUNNING && !this.inventoryOpen && !this.chatOpen);
+        this.hand.update(deltaTime, this.player.getMovementState(), this.sessionState === SESSION_STATES.RUNNING && !this.inventoryOpen && !this.chatOpen && !this.dead);
         this.renderer.render(
             this.player.getCameraState(),
             this.chunkManager.getRenderableChunks(),
@@ -1112,7 +1480,6 @@ export class GameApp {
             if (this.coordsVisible) {
                 this.overlay.setCoords(feetPosition);
             }
-
             this.hudElapsed = 0;
         }
 
@@ -1157,31 +1524,27 @@ export class GameApp {
         if (this.player) {
             this.player.detach();
         }
-
         if (this.renderer) {
             this.renderer.destroy();
         }
-
         if (this.pauseMenu) {
             this.pauseMenu.hide();
         }
-
         if (this.inventoryPanel) {
             this.inventoryPanel.hide();
         }
-
         if (this.chatOverlay) {
             this.chatOverlay.hide();
         }
-
         if (this.crosshair) {
             this.crosshair.hide();
             this.crosshair.setTargetActive(false);
         }
-
         if (this.hand) {
             this.hand.hide();
         }
+
+        this.hideDeathOverlay();
 
         if (this.overlay) {
             this.overlay.hideInstruction();

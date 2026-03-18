@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 $requestedWorldId = (int) (filter_input(INPUT_GET, 'id_mundo', FILTER_VALIDATE_INT) ?: 0);
 ?>
@@ -23,16 +23,33 @@ $requestedWorldId = (int) (filter_input(INPUT_GET, 'id_mundo', FILTER_VALIDATE_I
         </div>
 
         <div class="game-hud__bottom">
-            <div class="game-hotbar-wrap">
-                <div class="game-hand" data-game-hand hidden aria-hidden="true">
-                    <div class="game-hand__arm">
-                        <span class="game-hand__face game-hand__face--front"></span>
-                        <span class="game-hand__face game-hand__face--side"></span>
-                        <span class="game-hand__face game-hand__face--top"></span>
-                    </div>
+            <div class="game-hud__rail game-hud__rail--left">
+                <div class="game-vitals" data-game-health-wrap>
+                    <span class="game-vitals__label">Vida</span>
+                    <div class="game-vitals__segments" data-game-health aria-label="Barra de vida do jogador"></div>
+                    <strong class="game-vitals__value" data-game-health-text>10/10</strong>
                 </div>
+            </div>
 
-                <div class="game-hotbar" data-game-hotbar aria-label="Hotbar do jogador"></div>
+            <div class="game-hud__rail game-hud__rail--center">
+                <div class="game-hotbar-wrap">
+                    <div class="game-hand" data-game-hand hidden aria-hidden="true">
+                        <div class="game-hand__arm">
+                            <span class="game-hand__face game-hand__face--front"></span>
+                            <span class="game-hand__face game-hand__face--side"></span>
+                            <span class="game-hand__face game-hand__face--top"></span>
+                        </div>
+                    </div>
+
+                    <div class="game-hotbar" data-game-hotbar aria-label="Hotbar do jogador"></div>
+                </div>
+            </div>
+
+            <div class="game-hud__rail game-hud__rail--right">
+                <div class="game-flight" data-game-fly data-state="off">
+                    <span class="game-flight__label">Fly</span>
+                    <strong data-game-fly-text>OFF</strong>
+                </div>
             </div>
         </div>
     </div>
@@ -61,6 +78,19 @@ $requestedWorldId = (int) (filter_input(INPUT_GET, 'id_mundo', FILTER_VALIDATE_I
             <span class="game-chat__label">Chat</span>
             <input class="game-chat__input" data-chat-input type="text" maxlength="160" autocomplete="off" placeholder="Digite uma mensagem ou /comando">
         </form>
+    </div>
+
+    <div class="game-death" data-game-death hidden>
+        <div class="game-death__veil" data-game-death-veil></div>
+        <div class="game-death__card" data-game-death-card hidden>
+            <p class="game-death__eyebrow">MineWorld</p>
+            <h2>Voce morreu</h2>
+            <p>Renascer leva o jogador para o spawn original do mapa e limpa o inventario atual.</p>
+            <div class="game-death__actions">
+                <button class="button button--primary" type="button" data-death-respawn>Renascer</button>
+                <button class="button button--ghost" type="button" data-death-save-exit>Salvar e voltar ao menu principal</button>
+            </div>
+        </div>
     </div>
 
     <div class="game-instruction" data-overlay-instruction hidden>

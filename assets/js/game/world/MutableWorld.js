@@ -49,6 +49,10 @@ export class MutableWorld {
         return createChunkKey(chunkX, chunkZ);
     }
 
+    getSurfaceBiome(x, z) {
+        return this.terrain.getBiomeAt(x, z);
+    }
+
     hasChunkSnapshot(chunkX, chunkZ) {
         return this.chunkCache.has(this.getChunkKey(chunkX, chunkZ));
     }
@@ -127,8 +131,11 @@ export class MutableWorld {
                 setBlock(worldX, 0, worldZ, BLOCK_TYPES.bedrock, false);
 
                 for (let y = 1; y < surfaceHeight && y < WORLD_CONFIG.height; y += 1) {
-                    let blockId = BLOCK_TYPES.stone;
+                    if (this.terrain.isCaveAir(worldX, y, worldZ, surfaceHeight)) {
+                        continue;
+                    }
 
+                    let blockId = BLOCK_TYPES.stone;
                     if (y === surfaceHeight - 1) {
                         blockId = profile.topBlockId;
                     } else if (y >= surfaceHeight - 4) {
@@ -140,7 +147,7 @@ export class MutableWorld {
 
                 if (profile.hasWater) {
                     for (let y = surfaceHeight; y < profile.waterLevel && y < WORLD_CONFIG.height; y += 1) {
-                        setBlock(worldX, y, worldZ, BLOCK_TYPES.water, false);
+                        setBlock(worldX, y, worldZ, BLOCK_TYPES.water, true);
                     }
                 }
             }
@@ -380,6 +387,11 @@ export class MutableWorld {
                     const worldZ = getBlockCoord(proceduralSpawn.z) + offsetZ;
 
                     if (!isWithinWorldBounds(worldX, worldZ)) {
+                        continue;
+                    }
+
+                    const biome = this.getSurfaceBiome(worldX, worldZ);
+                    if (biome.key === 'river' || biome.key === 'lake') {
                         continue;
                     }
 

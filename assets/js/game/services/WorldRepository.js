@@ -1,12 +1,16 @@
 import { decodeChunkData, encodeChunkData } from '../world/ChunkCodec.js';
 import { getBlockIdByKey, getBlockKeyById, getBlockMaxStack, isPlaceableBlock } from '../world/BlockTypes.js';
-import { DEFAULT_USER_CONFIG, normalizeRuntimeConfig } from '../world/WorldConfig.js';
+import { DEFAULT_USER_CONFIG, WORLD_CONFIG, normalizeRuntimeConfig } from '../world/WorldConfig.js';
 
-const SAVE_SCHEMA_VERSION = 2;
+const SAVE_SCHEMA_VERSION = 3;
 const INVENTORY_SLOT_COUNT = 27;
 
 function isFiniteNumber(value) {
     return typeof value === 'number' && Number.isFinite(value);
+}
+
+function normalizeBooleanFlag(value) {
+    return value === true || value === 1 || value === '1';
 }
 
 function normalizeInventorySlot(slot) {
@@ -73,6 +77,25 @@ function normalizeMutations(mutations) {
     return Array.from(deduped.values());
 }
 
+function normalizeSpawnPosition(position) {
+    if (!position || typeof position !== 'object') {
+        return null;
+    }
+
+    const x = Number(position.x);
+    const y = Number(position.y);
+    const z = Number(position.z);
+    if (!isFiniteNumber(x) || !isFiniteNumber(y) || !isFiniteNumber(z)) {
+        return null;
+    }
+
+    return {
+        x: Number(x.toFixed(3)),
+        y: Number(y.toFixed(3)),
+        z: Number(z.toFixed(3))
+    };
+}
+
 function normalizeSaveState(saveState) {
     if (!saveState || typeof saveState !== 'object') {
         return null;
@@ -99,6 +122,14 @@ function normalizeSaveState(saveState) {
     const selectedHotbarIndex = Math.max(0, Math.min(8, Math.floor(Number(player.selected_hotbar_index || 0))));
     const inventory = saveState.inventory && typeof saveState.inventory === 'object' ? saveState.inventory : {};
     const world = saveState.world && typeof saveState.world === 'object' ? saveState.world : {};
+    const rawHealth = Math.floor(Number(player.health ?? WORLD_CONFIG.maxHealth));
+    const dead = normalizeBooleanFlag(player.dead) || rawHealth <= 0;
+    const health = dead
+        ? 0
+        : Math.max(0, Math.min(WORLD_CONFIG.maxHealth, Number.isFinite(rawHealth) ? rawHealth : WORLD_CONFIG.maxHealth));
+    const flyEnabled = normalizeBooleanFlag(player.fly_enabled);
+    const flyActive = flyEnabled && normalizeBooleanFlag(player.fly_active);
+    const spawnPosition = normalizeSpawnPosition(player.spawn_position);
 
     return {
         schema_version: SAVE_SCHEMA_VERSION,
@@ -112,7 +143,13 @@ function normalizeSaveState(saveState) {
                 yaw: Number(yaw.toFixed(6)),
                 pitch: Number(pitch.toFixed(6))
             },
-            selected_hotbar_index: selectedHotbarIndex
+            selected_hotbar_index: selectedHotbarIndex,
+            health: health,
+            max_health: WORLD_CONFIG.maxHealth,
+            dead: dead ? 1 : 0,
+            fly_enabled: flyEnabled ? 1 : 0,
+            fly_active: flyActive ? 1 : 0,
+            spawn_position: spawnPosition
         },
         inventory: {
             slots: normalizeInventorySlots(inventory.slots)

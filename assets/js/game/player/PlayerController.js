@@ -1,4 +1,4 @@
-﻿import { CollisionResolver } from './CollisionResolver.js';
+import { CollisionResolver } from './CollisionResolver.js';
 import { InputState } from './InputState.js';
 import { WORLD_CONFIG, normalizeRuntimeConfig } from '../world/WorldConfig.js';
 import { clampPitch, getForwardVector, getRightVector, normalizeAngle } from '../core/CameraMath.js';
@@ -16,10 +16,14 @@ export class PlayerController {
             z: 0.5
         };
         this.velocity = { x: 0, z: 0 };
+        this.knockbackVelocity = { x: 0, z: 0 };
         this.velocityY = 0;
         this.yaw = 0;
         this.pitch = DEFAULT_PITCH;
         this.grounded = true;
+        this.maxAirborneY = 0;
+        this.flyEnabled = Boolean(options.flyEnabled);
+        this.flying = this.flyEnabled && Boolean(options.flying);
         this.input = new InputState(this.canvas);
         this.collision = new CollisionResolver(this.world);
         this.onPointerLockChange = null;
@@ -65,9 +69,59 @@ export class PlayerController {
         return this.input.consumeActions();
     }
 
+    setFlyEnabled(enabled) {
+        this.flyEnabled = Boolean(enabled);
+        if (!this.flyEnabled) {
+            this.flying = false;
+            this.velocityY = Math.min(0, this.velocityY);
+        }
+    }
+
+    isFlyEnabled() {
+        return this.flyEnabled;
+    }
+
+    isFlying() {
+        return this.flying;
+    }
+
+    toggleFlightMode() {
+        if (!this.flyEnabled) {
+            return this.flying;
+        }
+
+        this.flying = !this.flying;
+        this.velocityY = 0;
+        this.maxAirborneY = this.position.y;
+        if (this.flying) {
+            this.grounded = false;
+        }
+
+        return this.flying;
+    }
+
+    applyKnockback(fromPosition) {
+        if (!fromPosition) {
+            return;
+        }
+
+        const deltaX = this.position.x - Number(fromPosition.x || 0);
+        const deltaZ = this.position.z - Number(fromPosition.z || 0);
+        const distance = Math.hypot(deltaX, deltaZ) || 1;
+        const directionX = deltaX / distance;
+        const directionZ = deltaZ / distance;
+        const impulse = 6.4;
+
+        this.knockbackVelocity.x = directionX * impulse;
+        this.knockbackVelocity.z = directionZ * impulse;
+        this.velocityY = Math.max(this.velocityY, WORLD_CONFIG.jumpVelocity * 0.42);
+        this.grounded = false;
+        this.maxAirborneY = Math.max(this.maxAirborneY, this.position.y + 0.5);
+    }
+
     update(deltaTime) {
         this.updateLook();
-        this.updateMovement(deltaTime);
+        return this.updateMovement(deltaTime);
     }
 
     updateLook() {
@@ -80,6 +134,9 @@ export class PlayerController {
     }
 
     updateMovement(deltaTime) {
+        const events = [];
+        const wasGrounded = this.grounded;
+        const previousY = this.position.y;
         const forward = (this.input.forward ? 1 : 0) - (this.input.backward ? 1 : 0);
         const sideways = (this.input.right ? 1 : 0) - (this.input.left ? 1 : 0);
         const moveMagnitude = Math.hypot(forward, sideways);
@@ -87,23 +144,39 @@ export class PlayerController {
         const normalizedSideways = moveMagnitude > 0 ? sideways / moveMagnitude : 0;
         const forwardVector = getForwardVector(this.yaw);
         const rightVector = getRightVector(this.yaw);
-        const targetVelocityX = (forwardVector.x * normalizedForward + rightVector.x * normalizedSideways) * WORLD_CONFIG.baseMoveSpeed;
-        const targetVelocityZ = (forwardVector.z * normalizedForward + rightVector.z * normalizedSideways) * WORLD_CONFIG.baseMoveSpeed;
-        const smoothing = Math.min(1, deltaTime * 10);
+        const moveSpeed = this.flying ? WORLD_CONFIG.flightMoveSpeed : WORLD_CONFIG.baseMoveSpeed;
+        const targetVelocityX = (forwardVector.x * normalizedForward + rightVector.x * normalizedSideways) * moveSpeed;
+        const targetVelocityZ = (forwardVector.z * normalizedForward + rightVector.z * normalizedSideways) * moveSpeed;
+        const smoothing = Math.min(1, deltaTime * (this.flying ? 12 : 10));
 
         this.velocity.x += (targetVelocityX - this.velocity.x) * smoothing;
         this.velocity.z += (targetVelocityZ - this.velocity.z) * smoothing;
 
-        if (this.grounded && this.input.jump) {
-            this.velocityY = WORLD_CONFIG.jumpVelocity;
-            this.grounded = false;
+        if (this.flying) {
+            const targetVerticalVelocity = ((this.input.jump ? 1 : 0) - (this.input.descend ? 1 : 0)) * WORLD_CONFIG.flightVerticalSpeed;
+            this.velocityY += (targetVerticalVelocity - this.velocityY) * Math.min(1, deltaTime * 12);
+        } else {
+            if (this.grounded && this.input.jump) {
+                this.velocityY = WORLD_CONFIG.jumpVelocity;
+                this.grounded = false;
+                this.maxAirborneY = this.position.y;
+            }
+
+            if (!this.grounded) {
+                this.maxAirborneY = Math.max(this.maxAirborneY, this.position.y);
+                this.velocityY -= WORLD_CONFIG.gravity * deltaTime;
+            }
         }
 
-        if (!this.grounded) {
-            this.velocityY -= WORLD_CONFIG.gravity * deltaTime;
-        }
+        const knockbackDamping = Math.min(1, deltaTime * (this.grounded ? 10 : 6));
+        this.knockbackVelocity.x += (0 - this.knockbackVelocity.x) * knockbackDamping;
+        this.knockbackVelocity.z += (0 - this.knockbackVelocity.z) * knockbackDamping;
 
-        const horizontal = this.collision.resolveHorizontal(this.position, this.velocity.x * deltaTime, this.velocity.z * deltaTime);
+        const horizontal = this.collision.resolveHorizontal(
+            this.position,
+            (this.velocity.x + this.knockbackVelocity.x) * deltaTime,
+            (this.velocity.z + this.knockbackVelocity.z) * deltaTime
+        );
         this.position.x = horizontal.x;
         this.position.z = horizontal.z;
 
@@ -111,9 +184,45 @@ export class PlayerController {
         this.position.y = vertical.y;
         this.grounded = vertical.grounded;
 
-        if (this.grounded || vertical.hitCeiling) {
+        if (this.flying) {
+            if (vertical.hitCeiling && this.velocityY > 0) {
+                this.velocityY = 0;
+            } else if (!this.input.jump && !this.input.descend) {
+                this.velocityY *= Math.max(0, 1 - deltaTime * 8);
+            }
+
+            return events;
+        }
+
+        if (wasGrounded && !vertical.grounded) {
+            this.maxAirborneY = previousY;
+        }
+
+        if (!wasGrounded && !vertical.grounded) {
+            this.maxAirborneY = Math.max(this.maxAirborneY, previousY, this.position.y);
+        }
+
+        if (!wasGrounded && vertical.grounded) {
+            const fallDistance = Math.max(0, this.maxAirborneY - this.position.y);
+            if (fallDistance >= WORLD_CONFIG.fallDamageStart) {
+                events.push({
+                    type: 'fall_damage',
+                    distance: fallDistance
+                });
+            }
+
+            this.maxAirborneY = this.position.y;
+        }
+
+        if (vertical.hitCeiling || this.grounded) {
             this.velocityY = 0;
         }
+
+        if (this.grounded) {
+            this.maxAirborneY = this.position.y;
+        }
+
+        return events;
     }
 
     applyPose(pose) {
@@ -130,7 +239,10 @@ export class PlayerController {
         this.velocity.x = 0;
         this.velocity.z = 0;
         this.velocityY = 0;
+        this.knockbackVelocity.x = 0;
+        this.knockbackVelocity.z = 0;
         this.grounded = this.position.y <= supportHeight + 0.0001;
+        this.maxAirborneY = this.position.y;
     }
 
     teleportTo(position) {
@@ -164,8 +276,10 @@ export class PlayerController {
 
     getMovementState() {
         return {
-            speed: Math.hypot(this.velocity.x, this.velocity.z),
-            grounded: this.grounded
+            speed: Math.hypot(this.velocity.x + this.knockbackVelocity.x, this.velocity.z + this.knockbackVelocity.z),
+            grounded: this.grounded,
+            flying: this.flying,
+            flyEnabled: this.flyEnabled
         };
     }
 
@@ -204,7 +318,9 @@ export class PlayerController {
             rotation: {
                 yaw: Number(this.yaw.toFixed(6)),
                 pitch: Number(this.pitch.toFixed(6))
-            }
+            },
+            fly_enabled: this.flyEnabled ? 1 : 0,
+            fly_active: this.flying ? 1 : 0
         };
     }
 }

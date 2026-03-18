@@ -1,13 +1,13 @@
 import { BLOCK_TYPES } from './BlockTypes.js';
 import { SeededRandom } from './SeededRandom.js';
-import { WORLD_CONFIG, clampNumber, isWithinWorldBounds } from './WorldConfig.js';
+import { WORLD_CONFIG, isWithinWorldBounds } from './WorldConfig.js';
 
 export class ProceduralSurfaceDecorator {
     constructor(seed, algorithmVersion, terrain) {
         this.terrain = terrain;
-        this.random = new SeededRandom(String(seed || 'mineworld') + '|surface|' + String(algorithmVersion || 'v1'));
+        this.random = new SeededRandom(String(seed || 'mineworld') + '|surface|' + String(algorithmVersion || 'v2'));
         this.columnCache = new Map();
-        this.waterLevel = clampNumber(30, WORLD_CONFIG.minSurfaceHeight + 2, WORLD_CONFIG.maxSurfaceHeight - 8);
+        this.waterLevel = terrain.getWaterLevel();
     }
 
     getColumnKey(x, z) {
@@ -47,40 +47,46 @@ export class ProceduralSurfaceDecorator {
             return this.columnCache.get(key);
         }
 
+        const biome = this.terrain.getBiomeAt(x, z);
         const surfaceHeight = this.terrain.getSurfaceHeightAt(x, z);
         const slope = this.terrain.estimateSlopeAt(x, z);
-        const nearWater = this.isNearWater(surfaceHeight, x, z);
-        const surfaceNoise = this.random.fractalNoise2D(x, z, {
-            frequency: 0.028,
-            octaves: 2,
-            lacunarity: 2,
-            persistence: 0.5,
-            salt: 311
-        });
-        const stonySurface = slope >= 3 || surfaceHeight >= this.waterLevel + 18 || surfaceNoise > 0.7;
-        const wateryColumn = surfaceHeight < this.waterLevel;
+        const nearWater = this.isNearWater(surfaceHeight, x, z) || biome.key === 'river' || biome.key === 'lake';
         let topBlockId = BLOCK_TYPES.grass;
         let fillerBlockId = BLOCK_TYPES.dirt;
 
-        if (wateryColumn || nearWater) {
+        if (biome.key === 'desert' || nearWater) {
             topBlockId = BLOCK_TYPES.sand;
             fillerBlockId = BLOCK_TYPES.sand;
-        } else if (stonySurface) {
+        } else if (slope >= 3 || surfaceHeight >= this.waterLevel + 24) {
             topBlockId = BLOCK_TYPES.stone;
             fillerBlockId = BLOCK_TYPES.stone;
         }
 
+        const wateryColumn = surfaceHeight < this.waterLevel || biome.key === 'river' || biome.key === 'lake';
         const profile = {
+            biomeKey: biome.key,
             surfaceHeight: surfaceHeight,
             topBlockId: topBlockId,
             fillerBlockId: fillerBlockId,
             hasWater: wateryColumn,
             waterLevel: this.waterLevel,
-            canGrowTree: !wateryColumn && !nearWater && topBlockId === BLOCK_TYPES.grass && slope <= 1 && surfaceHeight > this.waterLevel + 2
+            canGrowTree: !wateryColumn
+                && topBlockId === BLOCK_TYPES.grass
+                && slope <= 1
+                && surfaceHeight > this.waterLevel + 2
+                && (biome.key === 'forest' || biome.key === 'plains')
         };
 
         this.columnCache.set(key, profile);
         return profile;
+    }
+
+    getTreeScore(x, z) {
+        const biome = this.terrain.getBiomeAt(x, z);
+        const biomeFactor = biome.key === 'forest' ? 1 : 0.68;
+
+        return (this.random.valueNoise2D(x, z, 0.052, 601) * 0.72
+            + this.random.random2D(x, z, 733) * 0.28) * biomeFactor;
     }
 
     isTreeAnchor(x, z) {
@@ -89,13 +95,42 @@ export class ProceduralSurfaceDecorator {
             return false;
         }
 
-        const density = this.random.valueNoise2D(x, z, 0.095, 601);
-        const chance = this.random.random2D(x, z, 733);
-        return density > 0.48 && chance > 0.84;
+        const threshold = profile.biomeKey === 'forest' ? 0.62 : 0.86;
+        const radius = profile.biomeKey === 'forest' ? 3 : 4;
+        const score = this.getTreeScore(x, z);
+
+        if (score < threshold) {
+            return false;
+        }
+
+        for (let offsetX = -radius; offsetX <= radius; offsetX += 1) {
+            for (let offsetZ = -radius; offsetZ <= radius; offsetZ += 1) {
+                if (offsetX === 0 && offsetZ === 0) {
+                    continue;
+                }
+
+                const sampleX = x + offsetX;
+                const sampleZ = z + offsetZ;
+                if (!isWithinWorldBounds(sampleX, sampleZ)) {
+                    continue;
+                }
+
+                const neighborProfile = this.getColumnProfile(sampleX, sampleZ);
+                if (!neighborProfile.canGrowTree) {
+                    continue;
+                }
+
+                if (this.getTreeScore(sampleX, sampleZ) > score) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     getTreeHeight(x, z) {
-        return 4 + Math.floor(this.random.random2D(x, z, 907) * 2);
+        return 4 + Math.floor(this.random.random2D(x, z, 907) * 3);
     }
 
     decorateTreesForChunk(chunkX, chunkZ, applyBlock) {
