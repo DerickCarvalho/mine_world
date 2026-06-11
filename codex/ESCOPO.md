@@ -5,7 +5,11 @@
 - Toda nova PRD de produto concluida deve atualizar este arquivo na mesma entrega.
 - Este arquivo e a referencia rapida do estado atual do produto e deve refletir apenas o que ja foi combinado ou aprovado.
 - PRDs tecnicas e tasks so podem ser abertas a partir de PRDs de produto validadas.
+- Debitos tecnicos devem ser pequenos, autocontidos e registrados em `codex/debitos-tecnicos/`.
+- PRDs e debitos tecnicos concluidos devem possuir evidencia em `codex/execucoes/`.
 - Toda documentacao de produto, tecnica e execucao deve permanecer dentro de `codex/`.
+- Documentos novos devem usar `Harness Version = 2`, criterios `CA-NN` e transicoes formais de `codex/HARNESS.md`.
+- Requisitos substituidos devem permanecer registrados no historico, sem parecerem simultaneamente vigentes.
 
 ## Visao Atual do Produto
 
@@ -39,7 +43,7 @@ Quando houver necessidade de persistencia de conta, configuracoes e mundos, a ca
 - PRD-008 implementada: HUD de sobrevivencia refinado, voo estavel, audio sintetizado, cache dormant de chunks e worldgen 2.0.
 - PRD-009 implementada: worldgen 3.0 com serras/rios suaves, HUD inferior mais proximo do Minecraft e fix do travamento do gato.
 - PRD-010 implementada: held item no lugar da mao, inventario 3D coerente com o mundo, worldgen 3.5 e escala/fisica do player revisadas.
-- Proxima frente apos PRD-010: crafting, progressao sandbox mais completa e expansao do sistema de comandos.
+- Proxima frente apos PRD-011: crafting, progressao sandbox mais completa e expansao do sistema de comandos.
 
 ## Regras de Produto Consolidadas
 
@@ -83,7 +87,7 @@ Quando houver necessidade de persistencia de conta, configuracoes e mundos, a ca
 - O modo fly deve respeitar colisao, usando `espaco` para subir e `Shift` para descer quando ativo.
 - O jogo deve emitir audio para dano, passos, hit de gato, quebrar bloco e colocar bloco.
 - Chunks distantes devem sair do runtime ativo e voltar por snapshot reaproveitado quando revisitadas.
-- Mundos novos devem nascer em `algorithm_version = v3.5`.
+- Mundos novos devem nascer em `algorithm_version = v4.0`.
 - O relevo montanhoso atual deve priorizar serras e encostas suaves, e os rios devem ser rasos e largos, sem visual de canyon.
 - A geracao procedural `v3.5` deve reduzir crateras artificiais, suavizar cavernas e oferecer ao menos carvalho e eucalipto.
 - O gato nao pode travar a simulacao ao spawnar ou entrar em cena.
@@ -103,6 +107,22 @@ Quando houver necessidade de persistencia de conta, configuracoes e mundos, a ca
 | PRD-008 | Survival HUD, audio e worldgen 2.0 | Implementada | PRD-006, PRD-007 | Refinar mao e HUD, estabilizar fly, adicionar audio sintetizado, descarregar chunks com cache dormant e evoluir a geracao procedural para biomas mais naturais. |
 | PRD-009 | Worldgen 3.0, HUD Minecraft-like e fix do gato | Implementada | PRD-008 | Substituir o algoritmo por `v3` para novos mundos, suavizar serras e rios, aproximar o HUD da referencia visual alvo e remover o travamento do gato. |
 | PRD-010 | Held item, inventario 3D e worldgen 3.5 | Implementada | PRD-009 | Remover a mao visivel, reaproveitar as texturas do mundo nos itens da UI, migrar novos mundos para `v3.5` e revisar escala/fisica do player. |
+| PRD-011 | Estabilidade de runtime, worldgen 4.0 e HUD central | Implementada | PRD-010 | Corrigir cache dormant/unload de chunks, reduzir picos no main thread, migrar novos mundos para `v4.0` e centralizar a hotbar. |
+
+## Historico de Requisitos Consolidados
+
+| Tema | Requisito vigente | Substitui | Origem |
+|------|-------------------|-----------|--------|
+| Worldgen de mundos novos | `algorithm_version = v4.0` | `v2`, `v3` e `v3.5` como defaults de novos mundos | PRD-011 |
+| Item em primeira pessoa | Exibir held item selecionado, sem mao visivel | Mao/braco visivel das PRDs 005 e 008 | PRD-010 |
+| HUD inferior | Hotbar e metadata strip centralizadas | Posicionamentos anteriores da HUD | PRD-011 |
+| Cache de chunks | Cache dormant inicializado, sincronizado e reidratavel | Implementacao incompleta introduzida anteriormente | PRD-011 |
+
+## Debitos Tecnicos Ativos
+
+| ID | Titulo | Status | PRD de origem | Resumo |
+|----|--------|--------|---------------|--------|
+| - | Nenhum debito tecnico registrado | - | - | Criar novos itens com `$dt`. |
 
 ## Fora do Escopo Atual
 

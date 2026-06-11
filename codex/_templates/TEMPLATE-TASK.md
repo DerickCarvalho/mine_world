@@ -15,9 +15,11 @@
 |-------|-------|
 | **PRD** | [PRD-[NNN]-[nome-curto].md](../PRD-[NNN]-[nome-curto].md) |
 | **PRD Tecnica** | [PRD-TECNICA-[NNN]-[nome-curto].md](../PRD-TECNICA-[NNN]-[nome-curto].md) |
-| **Status** | [Pendente / Em andamento / Concluida / Bloqueada] |
+| **Harness Version** | 2 |
+| **Status** | Pendente |
 | **Depende de** | [TASK-XXX ou Nenhuma] |
 | **Bloqueia** | [TASK-XXX ou Nenhuma] |
+| **Criterios cobertos** | [CA-01, CA-02] |
 
 ---
 

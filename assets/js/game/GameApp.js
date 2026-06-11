@@ -341,8 +341,8 @@ export class GameApp {
 
         let guard = 0;
         while (this.chunkManager.getLoadedChunkCount() < INITIAL_CHUNK_TARGET && this.chunkManager.getPendingCount() > 0 && guard < 24) {
-            await this.loadNextChunkBatch(this.performanceProfile.turboEnabled ? 12 : 10);
-            const result = this.chunkManager.drainQueue(this.performanceProfile.turboEnabled ? 10 : 8);
+            await this.loadNextChunkBatch(this.performanceProfile.turboEnabled ? 6 : 4);
+            const result = this.chunkManager.drainQueue(this.performanceProfile.turboEnabled ? 4 : 3);
             if (result.processed === 0 && this.chunkManager.getPendingCount() === 0) {
                 break;
             }
@@ -435,7 +435,7 @@ export class GameApp {
             this.chunkManager.setRenderDistance(this.userConfig.render_distance);
             if (this.player) {
                 this.chunkManager.update(this.player.getFeetPosition(), true);
-                void this.loadNextChunkBatch(10);
+                void this.loadNextChunkBatch(4);
             }
         }
 
@@ -583,10 +583,10 @@ export class GameApp {
 
     getChunkDrainBudget(deltaTime) {
         let budget = deltaTime > 0.02 ? 1 : 2;
-        if (this.performanceProfile.turboEnabled && deltaTime < 0.016) {
+        if (this.performanceProfile.turboEnabled && deltaTime < 0.014) {
             budget += 1;
         }
-        return Math.max(1, Math.min(3, budget));
+        return Math.max(1, Math.min(2, budget));
     }
 
     setSelectedHotbarIndex(index) {
@@ -800,8 +800,8 @@ export class GameApp {
         this.overlay.setStatus('Executando /' + command.command_key + '...');
         this.player.teleportTo({ x: x, y: y, z: z });
         this.chunkManager.update(this.player.getFeetPosition(), true);
-        await this.loadNextChunkBatch(16);
-        this.chunkManager.drainQueue(12);
+        await this.loadNextChunkBatch(6);
+        this.chunkManager.drainQueue(4);
         this.currentBlockTarget = null;
         this.currentEntityTarget = null;
         if (this.coordsVisible) {
@@ -1236,8 +1236,8 @@ export class GameApp {
 
         this.player.teleportTo(this.worldSpawnPose);
         this.chunkManager.update(this.player.getFeetPosition(), true);
-        await this.loadNextChunkBatch(16);
-        this.chunkManager.drainQueue(12);
+        await this.loadNextChunkBatch(6);
+        this.chunkManager.drainQueue(4);
 
         this.sessionState = SESSION_STATES.RUNNING;
         this.player.setGameplayEnabled(true);
@@ -1360,12 +1360,12 @@ export class GameApp {
         }
 
         try {
-            await this.loadNextChunkBatch(16);
+            await this.loadNextChunkBatch(6);
 
             let settleGuard = 0;
             while (settleGuard < 8 && this.chunkManager.getPendingCount() > 0) {
-                await this.loadNextChunkBatch(16);
-                const drained = this.chunkManager.drainQueue(16);
+                await this.loadNextChunkBatch(6);
+                const drained = this.chunkManager.drainQueue(4);
                 if (drained.processed === 0) {
                     break;
                 }
@@ -1507,7 +1507,7 @@ export class GameApp {
             chunkResult = this.chunkManager.drainQueue(this.getChunkDrainBudget(deltaTime));
 
             if (chunkWindowChanged || this.chunkManager.getPendingCount() > 0) {
-                void this.loadNextChunkBatch(this.performanceProfile.turboEnabled ? 6 : 4);
+                void this.loadNextChunkBatch(this.performanceProfile.turboEnabled ? 3 : 2);
             }
 
             if (chunkResult.generated > 0 || chunkResult.rebuilt > 0 || this.chunkManager.getPendingSaveCount() > 0) {

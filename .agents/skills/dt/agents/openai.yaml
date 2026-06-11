@@ -1,0 +1,4 @@
+interface:
+  display_name: "Debito Tecnico"
+  short_description: "Criar debito tecnico pequeno e executavel"
+  default_prompt: "Use $dt para conceber um novo debito tecnico do MineWorld."

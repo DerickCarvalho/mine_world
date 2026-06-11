@@ -5,7 +5,7 @@ import { WORLD_CONFIG, isWithinWorldBounds } from './WorldConfig.js';
 export class ProceduralSurfaceDecorator {
     constructor(seed, algorithmVersion, terrain) {
         this.terrain = terrain;
-        this.random = new SeededRandom(String(seed || 'mineworld') + '|surface|' + String(algorithmVersion || 'v3.5'));
+        this.random = new SeededRandom(String(seed || 'mineworld') + '|surface|' + String(algorithmVersion || 'v4.0'));
         this.columnCache = new Map();
         this.waterLevel = terrain.getWaterLevel();
     }
@@ -56,7 +56,7 @@ export class ProceduralSurfaceDecorator {
         if (biome.key === 'desert' || nearWater) {
             topBlockId = BLOCK_TYPES.sand;
             fillerBlockId = BLOCK_TYPES.sand;
-        } else if ((biome.key === 'mountains' && (slope >= 5 || surfaceHeight >= this.waterLevel + 27)) || surfaceHeight >= this.waterLevel + 36) {
+        } else if ((biome.key === 'mountains' && (slope >= 6 || surfaceHeight >= this.waterLevel + 30)) || surfaceHeight >= this.waterLevel + 38) {
             topBlockId = BLOCK_TYPES.stone;
             fillerBlockId = BLOCK_TYPES.stone;
         }
@@ -82,11 +82,11 @@ export class ProceduralSurfaceDecorator {
 
     getTreeScore(x, z) {
         const biome = this.terrain.getBiomeAt(x, z);
-        const biomeFactor = biome.key === 'forest' ? 1 : 0.42;
+        const biomeFactor = biome.key === 'forest' ? 1 : 0.34;
 
-        return (this.random.valueNoise2D(x, z, 0.025, 601) * 0.68
-            + this.random.valueNoise2D(x + 1800, z - 900, 0.012, 733) * 0.22
-            + this.random.random2D(x, z, 877) * 0.1) * biomeFactor;
+        return (this.random.valueNoise2D(x, z, 0.024, 601) * 0.7
+            + this.random.valueNoise2D(x + 1800, z - 900, 0.01, 733) * 0.22
+            + this.random.random2D(x, z, 877) * 0.08) * biomeFactor;
     }
 
     isTreeAnchor(x, z) {
@@ -95,8 +95,8 @@ export class ProceduralSurfaceDecorator {
             return false;
         }
 
-        const threshold = profile.biomeKey === 'forest' ? 0.8 : 0.95;
-        const radius = profile.biomeKey === 'forest' ? 6 : 9;
+        const threshold = profile.biomeKey === 'forest' ? 0.86 : 0.965;
+        const radius = profile.biomeKey === 'forest' ? 7 : 10;
         const score = this.getTreeScore(x, z);
 
         if (score < threshold) {

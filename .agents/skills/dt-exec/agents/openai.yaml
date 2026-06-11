@@ -1,0 +1,4 @@
+interface:
+  display_name: "Executar Debito Tecnico"
+  short_description: "Executar e validar um debito tecnico"
+  default_prompt: "Use $dt-exec para executar o debito tecnico informado de ponta a ponta."

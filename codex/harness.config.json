@@ -1,0 +1,44 @@
+{
+  "version": 2,
+  "prdStates": [
+    "Rascunho",
+    "Em validacao",
+    "Aprovada",
+    "Em andamento",
+    "Implementada",
+    "Bloqueada",
+    "Cancelada"
+  ],
+  "prdTransitions": {
+    "Rascunho": ["Em validacao", "Cancelada"],
+    "Em validacao": ["Rascunho", "Aprovada", "Cancelada"],
+    "Aprovada": ["Em andamento", "Cancelada"],
+    "Em andamento": ["Implementada", "Bloqueada", "Cancelada"],
+    "Bloqueada": ["Em andamento", "Cancelada"],
+    "Implementada": [],
+    "Cancelada": []
+  },
+  "dtStates": [
+    "Rascunho",
+    "Aprovada",
+    "Em andamento",
+    "Concluida",
+    "Bloqueada",
+    "Cancelada"
+  ],
+  "dtTransitions": {
+    "Rascunho": ["Aprovada", "Cancelada"],
+    "Aprovada": ["Em andamento", "Cancelada"],
+    "Em andamento": ["Concluida", "Bloqueada", "Cancelada"],
+    "Bloqueada": ["Em andamento", "Cancelada"],
+    "Concluida": [],
+    "Cancelada": []
+  },
+  "taskStates": ["Pendente", "Em andamento", "Concluida", "Bloqueada"],
+  "taskTransitions": {
+    "Pendente": ["Em andamento", "Bloqueada"],
+    "Em andamento": ["Concluida", "Bloqueada"],
+    "Bloqueada": ["Em andamento"],
+    "Concluida": []
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "mine-world-harness",
+  "private": true,
+  "scripts": {
+    "harness": "node codex/harness.mjs",
+    "test:harness": "node codex/harness.mjs validate && node codex/scripts/test-harness-cli.mjs",
+    "test:syntax": "node codex/scripts/test-syntax.mjs",
+    "test:smoke": "node codex/scripts/test-smoke.mjs",
+    "test": "npm run test:harness && npm run test:syntax && npm run test:smoke"
+  }
+}

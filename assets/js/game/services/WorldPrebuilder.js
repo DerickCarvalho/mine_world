@@ -30,7 +30,7 @@ export class WorldPrebuilder {
         this.worldMeta = options.worldMeta;
         this.saveState = options.saveState || null;
         this.radius = Math.max(1, Math.floor(Number(options.radius || 2)));
-        this.batchSize = Math.max(1, Math.floor(Number(options.batchSize || 8)));
+        this.batchSize = Math.max(1, Math.floor(Number(options.batchSize || 3)));
         this.onProgress = typeof options.onProgress === 'function' ? options.onProgress : null;
         this.terrain = new TerrainGenerator(this.worldMeta.seed, this.worldMeta.algorithm_version);
         this.world = new MutableWorld(this.terrain);

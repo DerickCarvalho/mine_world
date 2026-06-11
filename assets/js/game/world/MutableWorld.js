@@ -1,4 +1,4 @@
-import { BLOCK_TYPES, getBlockIdByKey, getBlockKeyById, isBreakableBlock, isCollectableBlock, isPlaceableBlock, isSolidBlock } from './BlockTypes.js';
+﻿import { BLOCK_TYPES, getBlockIdByKey, getBlockKeyById, isBreakableBlock, isCollectableBlock, isPlaceableBlock, isSolidBlock } from './BlockTypes.js';
 import { createChunkKey } from './ChunkStore.js';
 import { ProceduralSurfaceDecorator } from './ProceduralSurfaceDecorator.js';
 import { WORLD_CONFIG, getBlockCoord, getChunkCoord, isWithinWorldBounds } from './WorldConfig.js';
@@ -21,10 +21,11 @@ export class MutableWorld {
         this.terrain = terrain;
         this.decorator = new ProceduralSurfaceDecorator(terrain.seed, terrain.algorithmVersion, terrain);
         this.chunkCache = new Map();
+        this.dormantChunkCache = new Map();
+        this.dormantChunkLimit = 96;
         this.mutationValues = new Map();
         this.mutationChunkIndex = new Map();
     }
-
 
     syncDormantSnapshot(snapshot) {
         if (!snapshot) {
@@ -39,6 +40,7 @@ export class MutableWorld {
             this.dormantChunkCache.delete(oldestKey);
         }
     }
+
     getChunkArraySize() {
         return WORLD_CONFIG.chunkSize * WORLD_CONFIG.chunkSize * WORLD_CONFIG.height;
     }
@@ -68,13 +70,22 @@ export class MutableWorld {
     }
 
     hasChunkSnapshot(chunkX, chunkZ) {
-        return this.chunkCache.has(this.getChunkKey(chunkX, chunkZ));
+        const key = this.getChunkKey(chunkX, chunkZ);
+        return this.chunkCache.has(key) || this.dormantChunkCache.has(key);
     }
 
     getChunkSnapshot(chunkX, chunkZ) {
         const key = this.getChunkKey(chunkX, chunkZ);
         if (this.chunkCache.has(key)) {
             return this.chunkCache.get(key);
+        }
+
+        if (this.dormantChunkCache.has(key)) {
+            const dormant = this.dormantChunkCache.get(key);
+            const snapshot = createChunkSnapshot(chunkX, chunkZ, new Uint8Array(dormant.data));
+            this.dormantChunkCache.delete(key);
+            this.chunkCache.set(key, snapshot);
+            return snapshot;
         }
 
         const data = this.generateChunkData(chunkX, chunkZ);
@@ -90,7 +101,9 @@ export class MutableWorld {
 
         const hydratedData = new Uint8Array(data);
         this.applyMutationsToChunkData(chunkX, chunkZ, hydratedData);
-        this.chunkCache.set(this.getChunkKey(chunkX, chunkZ), createChunkSnapshot(chunkX, chunkZ, hydratedData));
+        const key = this.getChunkKey(chunkX, chunkZ);
+        this.dormantChunkCache.delete(key);
+        this.chunkCache.set(key, createChunkSnapshot(chunkX, chunkZ, hydratedData));
         return true;
     }
 
@@ -280,7 +293,9 @@ export class MutableWorld {
 
     setMutation(x, y, z, blockId, updateCache = true) {
         const mutationKey = createMutationKey(x, y, z);
-        const chunkKey = this.getChunkKey(getChunkCoord(x), getChunkCoord(z));
+        const chunkX = getChunkCoord(x);
+        const chunkZ = getChunkCoord(z);
+        const chunkKey = this.getChunkKey(chunkX, chunkZ);
         const baseBlockId = this.generateBaseBlockIdAt(x, y, z);
 
         if (blockId === baseBlockId) {
@@ -304,12 +319,19 @@ export class MutableWorld {
             this.mutationChunkIndex.get(chunkKey).add(mutationKey);
         }
 
-        if (updateCache) {
-            const snapshot = this.chunkCache.get(chunkKey);
-            if (snapshot && this.isWithinY(y)) {
-                const localX = x - getChunkCoord(x) * WORLD_CONFIG.chunkSize;
-                const localZ = z - getChunkCoord(z) * WORLD_CONFIG.chunkSize;
-                snapshot.data[this.getChunkIndex(localX, y, localZ)] = blockId;
+        if (updateCache && this.isWithinY(y)) {
+            const localX = x - chunkX * WORLD_CONFIG.chunkSize;
+            const localZ = z - chunkZ * WORLD_CONFIG.chunkSize;
+            const index = this.getChunkIndex(localX, y, localZ);
+            const activeSnapshot = this.chunkCache.get(chunkKey);
+            const dormantSnapshot = this.dormantChunkCache.get(chunkKey);
+
+            if (activeSnapshot) {
+                activeSnapshot.data[index] = blockId;
+            }
+
+            if (dormantSnapshot) {
+                dormantSnapshot.data[index] = blockId;
             }
         }
     }

@@ -1,0 +1,4 @@
+interface:
+  display_name: "PRD"
+  short_description: "Conceber PRD, PRD tecnica e tasks"
+  default_prompt: "Use $prd para conceber uma nova PRD completa para o MineWorld."

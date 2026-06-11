@@ -1,0 +1,4 @@
+interface:
+  display_name: "Executar PRD"
+  short_description: "Executar e validar uma PRD por numero"
+  default_prompt: "Use $prd-exec para executar a PRD informada de ponta a ponta."

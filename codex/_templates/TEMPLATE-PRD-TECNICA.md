@@ -14,6 +14,7 @@
 | Campo | Valor |
 |-------|-------|
 | **PRD de Produto** | [PRD-[NNN]-[nome-curto].md](./PRD-[NNN]-[nome-curto].md) |
+| **Harness Version** | 2 |
 | **Data** | [DD/MM/YYYY] |
 | **Autor Tecnico** | [Nome] |
 | **Versao** | 1.0 |
@@ -158,6 +159,8 @@
 | Task | Objetivo | Dependencias |
 |------|----------|--------------|
 | [TASK-001](./tasks/TASK-001-[descricao].md) | [descricao] | [nenhuma ou outra task] |
+
+Cada criterio `CA-NN` da PRD de produto deve aparecer em pelo menos uma task.
 
 ---
 

@@ -11,6 +11,7 @@
 > **REGRA PERMANENTE**
 >
 > Nenhuma PRD de produto e considerada concluida se `codex/ESCOPO.md` nao tiver sido atualizado na mesma entrega.
+> Alteracoes de status devem usar `npm run harness -- prd:status [NNN] "[estado]"`.
 
 ---
 
@@ -19,10 +20,11 @@
 | Campo | Valor |
 |-------|-------|
 | **ID** | PRD-[NNN] |
+| **Harness Version** | 2 |
 | **Titulo** | [titulo da funcionalidade] |
 | **Tipo** | [Nova funcionalidade / Melhoria / Correcao] |
 | **Prioridade** | [Alta / Media / Baixa] |
-| **Status** | [Rascunho / Em validacao / Aprovada / Cancelada] |
+| **Status** | Rascunho |
 | **Data** | [DD/MM/YYYY] |
 | **Autor** | [Nome] |
 | **Dependencias** | [PRD-XXX ou Nao possui] |
@@ -166,10 +168,18 @@
 
 ## Criterios de Aceite
 
-1. [ ] [criterio verificavel 1]
-2. [ ] [criterio verificavel 2]
-3. [ ] [criterio verificavel 3]
-4. [ ] [criterio verificavel 4]
+- [ ] **CA-01:** [criterio verificavel 1]
+- [ ] **CA-02:** [criterio verificavel 2]
+- [ ] **CA-03:** [criterio verificavel 3]
+- [ ] **CA-04:** [criterio verificavel 4]
+
+---
+
+## Historico de Requisitos
+
+| Requisito / Decisao | Estado | Substitui | Substituido por | Motivo |
+|---------------------|--------|-----------|----------------|--------|
+| [requisito novo] | Vigente | [PRD/RF anterior ou Nao possui] | - | [motivo] |
 
 ---
 
@@ -186,3 +196,4 @@
 |-----------|------|
 | PRD tecnica | [PRD-TECNICA-[NNN]-[nome-curto].md](./PRD-TECNICA-[NNN]-[nome-curto].md) |
 | Tasks | [tasks/](./tasks/) |
+| Validacao final | [PRD-[NNN]-validacao.md](../../execucoes/PRD-[NNN]-validacao.md) |
