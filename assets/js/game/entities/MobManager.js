@@ -1,13 +1,16 @@
 import { BLOCK_TYPES } from '../world/BlockTypes.js';
 import { CatMob } from './CatMob.js';
+import { CrawlerMob } from './CrawlerMob.js';
+import { PigMob } from './PigMob.js';
+import { SheepMob } from './SheepMob.js';
 
 export class MobManager {
     constructor(world) {
         this.world = world;
-        this.cats = [];
+        this.entities = [];
         this.spawnElapsed = 0;
         this.sequence = 1;
-        this.maxCats = 5;
+        this.maxEntities = 9;
     }
 
     isWalkableSurface(x, z, topY) {
@@ -20,7 +23,7 @@ export class MobManager {
             && topBlock !== BLOCK_TYPES.wood;
     }
 
-    hasForestNearby(x, z) {
+    hasBiomeNearby(x, z, allowedBiomes) {
         if (typeof this.world.getSurfaceBiome !== 'function') {
             return true;
         }
@@ -28,7 +31,7 @@ export class MobManager {
         for (let offsetX = -8; offsetX <= 8; offsetX += 2) {
             for (let offsetZ = -8; offsetZ <= 8; offsetZ += 2) {
                 const biome = this.world.getSurfaceBiome(x + offsetX, z + offsetZ);
-                if (biome && biome.key === 'forest') {
+                if (biome && allowedBiomes.includes(biome.key)) {
                     return true;
                 }
             }
@@ -37,7 +40,7 @@ export class MobManager {
         return false;
     }
 
-    findSpawnPointNearPlayer(playerPosition) {
+    findSpawnPointNearPlayer(playerPosition, allowedBiomes) {
         for (let attempt = 0; attempt < 16; attempt += 1) {
             const angle = Math.random() * Math.PI * 2;
             const distance = 6 + Math.random() * 7;
@@ -49,7 +52,7 @@ export class MobManager {
                 continue;
             }
 
-            if (!this.isWalkableSurface(x, z, topY) || !this.hasForestNearby(x, z)) {
+            if (!this.isWalkableSurface(x, z, topY) || !this.hasBiomeNearby(x, z, allowedBiomes)) {
                 continue;
             }
 
@@ -63,19 +66,29 @@ export class MobManager {
         return null;
     }
 
-    spawnCatAt(spawnPoint) {
+    spawnMob(type, spawnPoint) {
         if (!spawnPoint) {
             return null;
         }
 
-        const cat = new CatMob('cat-' + this.sequence, spawnPoint);
+        let entity = null;
+        if (type === 'pig') {
+            entity = new PigMob('pig-' + this.sequence, spawnPoint);
+        } else if (type === 'sheep') {
+            entity = new SheepMob('sheep-' + this.sequence, spawnPoint);
+        } else if (type === 'crawler') {
+            entity = new CrawlerMob('crawler-' + this.sequence, spawnPoint);
+        } else {
+            entity = new CatMob('cat-' + this.sequence, spawnPoint);
+        }
+
         this.sequence += 1;
-        this.cats.push(cat);
-        return cat;
+        this.entities.push(entity);
+        return entity;
     }
 
     maybeSpawnNearPlayer(playerPosition) {
-        if (this.cats.length >= this.maxCats || !this.hasForestNearby(playerPosition.x, playerPosition.z)) {
+        if (this.entities.length >= this.maxEntities) {
             return;
         }
 
@@ -83,17 +96,47 @@ export class MobManager {
             return;
         }
 
-        const spawnPoint = this.findSpawnPointNearPlayer(playerPosition);
+        const biome = typeof this.world.getSurfaceBiome === 'function'
+            ? this.world.getSurfaceBiome(playerPosition.x, playerPosition.z)
+            : { key: 'plains' };
+        let type = 'cat';
+        let allowedBiomes = ['forest', 'taiga'];
+
+        if (biome && (biome.key === 'mountains' || biome.key === 'mountain' || biome.key === 'badlands')) {
+            type = 'crawler';
+            allowedBiomes = ['mountains', 'mountain', 'badlands'];
+        } else if (biome && biome.key === 'desert' && Math.random() > 0.58) {
+            type = 'crawler';
+            allowedBiomes = ['desert', 'badlands'];
+        } else if (biome && (biome.key === 'plains' || biome.key === 'meadow')) {
+            type = Math.random() > 0.45 ? 'sheep' : 'pig';
+            allowedBiomes = ['plains', 'meadow'];
+        } else if (biome && biome.key === 'taiga') {
+            type = 'sheep';
+            allowedBiomes = ['taiga', 'forest', 'meadow'];
+        }
+
+        const spawnPoint = this.findSpawnPointNearPlayer(playerPosition, allowedBiomes);
         if (!spawnPoint) {
             return;
         }
 
-        this.spawnCatAt(spawnPoint);
+        this.spawnMob(type, spawnPoint);
     }
 
     spawnCommandMob(type, playerPosition, playerRotation) {
         const normalizedType = String(type || 'gato').trim().toLowerCase();
-        if (!['gato', 'cat'].includes(normalizedType)) {
+        const aliases = {
+            gato: 'cat',
+            cat: 'cat',
+            porco: 'pig',
+            pig: 'pig',
+            ovelha: 'sheep',
+            sheep: 'sheep',
+            crawler: 'crawler'
+        };
+        const mobType = aliases[normalizedType];
+        if (!mobType) {
             return null;
         }
 
@@ -112,10 +155,13 @@ export class MobManager {
         }
 
         if (!spawnPoint) {
-            spawnPoint = this.findSpawnPointNearPlayer(playerPosition);
+            const spawnBiomes = mobType === 'cat'
+                ? ['forest', 'taiga']
+                : ['plains', 'meadow', 'forest', 'taiga'];
+            spawnPoint = this.findSpawnPointNearPlayer(playerPosition, spawnBiomes);
         }
 
-        return this.spawnCatAt(spawnPoint);
+        return this.spawnMob(mobType, spawnPoint);
     }
 
     update(deltaTime, playerPosition) {
@@ -127,15 +173,15 @@ export class MobManager {
             this.maybeSpawnNearPlayer(playerPosition);
         }
 
-        this.cats = this.cats.filter((cat) => {
-            const distance = Math.hypot(cat.position.x - playerPosition.x, cat.position.z - playerPosition.z);
-            return distance <= 56 || cat.following || cat.aggressive;
+        this.entities = this.entities.filter((entity) => {
+            const distance = Math.hypot(entity.position.x - playerPosition.x, entity.position.z - playerPosition.z);
+            return distance <= 56 || entity.following || entity.aggressive;
         });
 
-        this.cats.forEach((cat) => {
-            const event = cat.update(deltaTime, playerPosition, this.world, this.isWalkableSurface.bind(this));
+        this.entities.forEach((entity) => {
+            const event = entity.update(deltaTime, playerPosition, this.world, this.isWalkableSurface.bind(this));
             if (event) {
-                events.push(Object.assign({ entityId: cat.id }, event));
+                events.push(Object.assign({ entityId: entity.id }, event));
             }
         });
 
@@ -143,17 +189,17 @@ export class MobManager {
     }
 
     getEntities() {
-        return this.cats;
+        return this.entities;
     }
 
     getRenderableEntities() {
-        return this.cats.map(function (cat) {
-            return cat.getRenderable();
+        return this.entities.map(function (entity) {
+            return entity.getRenderable();
         });
     }
 
     toggleFollow(entityId) {
-        const cat = this.cats.find(function (entry) {
+        const cat = this.entities.find(function (entry) {
             return entry.id === entityId;
         });
 
@@ -177,8 +223,8 @@ export class MobManager {
         };
     }
 
-    hitEntity(entityId, attackerPosition) {
-        const cat = this.cats.find(function (entry) {
+    hitEntity(entityId, attackerPosition, damage) {
+        const cat = this.entities.find(function (entry) {
             return entry.id === entityId;
         });
 
@@ -186,16 +232,31 @@ export class MobManager {
             return null;
         }
 
-        cat.takeHit(attackerPosition);
+        const impact = cat.takeHit(attackerPosition, damage);
+        if (impact && impact.dead) {
+            this.entities = this.entities.filter(function (entry) {
+                return entry.id !== entityId;
+            });
+
+            return {
+                entity: cat,
+                aggressive: true,
+                died: true,
+                drops: typeof cat.getDrops === 'function' ? cat.getDrops() : []
+            };
+        }
+
         return {
             entity: cat,
-            aggressive: true
+            aggressive: true,
+            died: false,
+            health: impact && Number.isFinite(impact.health) ? impact.health : null
         };
     }
 
     resetAfterRespawn() {
-        this.cats.forEach(function (cat) {
-            cat.resetBehavior();
+        this.entities.forEach(function (entity) {
+            entity.resetBehavior();
         });
     }
 }

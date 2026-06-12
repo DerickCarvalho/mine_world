@@ -12,6 +12,11 @@ $requestedWorldId = (int) (filter_input(INPUT_GET, 'id_mundo', FILTER_VALIDATE_I
                 <strong data-game-target>Nenhum</strong>
             </div>
 
+            <div class="game-chip game-chip--mode">
+                <span>Modo</span>
+                <strong data-game-mode>SOBREVIVENCIA</strong>
+            </div>
+
             <div class="game-chip game-chip--coords" data-game-coords-chip hidden>
                 <span>Posicao</span>
                 <strong data-game-coords>X 0.0 | Y 0.0 | Z 0.0</strong>
@@ -31,6 +36,12 @@ $requestedWorldId = (int) (filter_input(INPUT_GET, 'id_mundo', FILTER_VALIDATE_I
                         <strong class="game-vitals__value" data-game-health-text>10/10</strong>
                     </div>
 
+                    <div class="game-vitals game-vitals--hunger" data-game-hunger-wrap>
+                        <span class="game-vitals__label">Fome</span>
+                        <div class="game-vitals__segments" data-game-hunger aria-label="Barra de fome do jogador"></div>
+                        <strong class="game-vitals__value" data-game-hunger-text>10/10</strong>
+                    </div>
+
                     <div class="game-flight" data-game-fly data-state="off">
                         <span class="game-flight__label">Fly</span>
                         <strong data-game-fly-text>OFF</strong>
@@ -48,11 +59,33 @@ $requestedWorldId = (int) (filter_input(INPUT_GET, 'id_mundo', FILTER_VALIDATE_I
         <div class="game-inventory__card">
             <div class="game-inventory__header">
                 <p class="game-inventory__eyebrow">MineWorld</p>
-                <h2>Inventario simples</h2>
-                <p>Organize os blocos por clique. Os 9 primeiros slots formam a hotbar.</p>
+                <h2 data-inventory-title>Inventario e crafting</h2>
+                <p data-inventory-copy>Organize recursos, consulte receitas e mantenha a hotbar pronta para construir.</p>
             </div>
 
-            <div class="game-inventory__grid" data-inventory-grid></div>
+            <div class="game-inventory__layout">
+                <div class="game-inventory__main">
+                    <div class="game-inventory__grid" data-inventory-grid></div>
+                </div>
+
+                <aside class="game-inventory__side">
+                    <section class="game-inventory__section">
+                        <div class="game-inventory__section-header">
+                            <h3>Crafts</h3>
+                            <span data-inventory-craft-mode>Survival</span>
+                        </div>
+                        <div class="game-inventory__recipes" data-inventory-recipes></div>
+                    </section>
+
+                    <section class="game-inventory__section" data-creative-panel hidden>
+                        <div class="game-inventory__section-header">
+                            <h3>Catalogo criativo</h3>
+                            <span>Escolha um bloco</span>
+                        </div>
+                        <div class="game-inventory__creative" data-inventory-creative></div>
+                    </section>
+                </aside>
+            </div>
 
             <div class="game-inventory__hint">
                 <span>E</span>
@@ -131,7 +164,15 @@ $requestedWorldId = (int) (filter_input(INPUT_GET, 'id_mundo', FILTER_VALIDATE_I
                             <dt>Posicao atual</dt>
                             <dd data-pause-player-position>-</dd>
                         </div>
+                        <div>
+                            <dt>Modo</dt>
+                            <dd data-pause-game-mode>survival</dd>
+                        </div>
                     </dl>
+
+                    <div class="game-pause__mode-actions">
+                        <button class="button button--ghost" type="button" data-pause-toggle-mode>Alternar modo</button>
+                    </div>
                 </section>
 
                 <section class="game-pause__panel">

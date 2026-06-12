@@ -7,6 +7,7 @@ require_once __DIR__ . '/../dependencias/utils.php';
 
 const WORLD_SAVE_SCHEMA_VERSION = 3;
 const WORLD_PLAYER_MAX_HEALTH = 10;
+const WORLD_PLAYER_MAX_HUNGER = 10;
 const WORLD_INVENTORY_SLOT_COUNT = 27;
 const WORLD_HOTBAR_SLOT_COUNT = 9;
 const WORLD_MAX_STACK_SIZE = 64;
@@ -19,11 +20,12 @@ const WORLD_MIN_Y = 0.0;
 const WORLD_MAX_Y = 100.0;
 const WORLD_BLOCK_MIN_Y = 0;
 const WORLD_BLOCK_MAX_Y = 99;
-const WORLD_MIN_PITCH = -1.3;
-const WORLD_MAX_PITCH = 1.3;
+const WORLD_MIN_PITCH = -1.555;
+const WORLD_MAX_PITCH = 1.555;
 const WORLD_TAU = M_PI * 2;
-const WORLD_ALLOWED_BLOCK_IDS = ['air', 'grass', 'dirt', 'stone', 'sand', 'water', 'wood', 'leaves', 'bedrock'];
-const WORLD_INVENTORY_BLOCK_IDS = ['grass', 'dirt', 'stone', 'sand', 'wood', 'leaves'];
+const WORLD_GAME_MODES = ['survival', 'creative'];
+const WORLD_ALLOWED_BLOCK_IDS = ['air', 'grass', 'dirt', 'stone', 'sand', 'water', 'wood', 'leaves', 'bedrock', 'coal_ore', 'iron_ore', 'gold_ore', 'planks', 'cobblestone', 'bricks', 'glass', 'stick', 'workbench', 'wood_pickaxe', 'wood_axe', 'wood_sword', 'stone_pickaxe', 'stone_axe', 'stone_sword', 'raw_pork', 'cloth', 'fang'];
+const WORLD_INVENTORY_BLOCK_IDS = ['grass', 'dirt', 'stone', 'sand', 'wood', 'leaves', 'coal_ore', 'iron_ore', 'gold_ore', 'planks', 'cobblestone', 'bricks', 'glass', 'stick', 'workbench', 'wood_pickaxe', 'wood_axe', 'wood_sword', 'stone_pickaxe', 'stone_axe', 'stone_sword', 'raw_pork', 'cloth', 'fang'];
 const WORLD_CHUNK_SIZE = 16;
 const WORLD_CHUNK_HEIGHT = 100;
 const WORLD_CHUNK_SCHEMA_VERSION = 1;
@@ -150,6 +152,16 @@ function world_normalize_bool($value): bool
     return $value === true || $value === 1 || $value === '1';
 }
 
+function world_normalize_game_mode($value): string
+{
+    if (!is_string($value) || trim($value) === '') {
+        return 'survival';
+    }
+
+    $normalized = strtolower(trim($value));
+    return in_array($normalized, WORLD_GAME_MODES, true) ? $normalized : 'survival';
+}
+
 function world_normalize_optional_position($value): ?array
 {
     if (!is_array($value)) {
@@ -248,6 +260,60 @@ function world_normalize_inventory_slots($slots): array
     return $normalized;
 }
 
+function world_normalize_item_drop($drop): ?array
+{
+    if (!is_array($drop)) {
+        return null;
+    }
+
+    $blockId = world_normalize_block_id($drop['block_id'] ?? null, false, true);
+    if ($blockId === null) {
+        return null;
+    }
+
+    $x = world_numeric_or_null($drop['x'] ?? null);
+    $y = world_numeric_or_null($drop['y'] ?? null);
+    $z = world_numeric_or_null($drop['z'] ?? null);
+
+    if ($x === null || $y === null || $z === null) {
+        return null;
+    }
+
+    if ($x < WORLD_MIN_X || $x > WORLD_MAX_X || $z < WORLD_MIN_Z || $z > WORLD_MAX_Z || $y < WORLD_MIN_Y || $y > WORLD_MAX_Y) {
+        return null;
+    }
+
+    $quantity = filter_var($drop['quantity'] ?? 1, FILTER_VALIDATE_INT);
+    if ($quantity === false || $quantity <= 0) {
+        return null;
+    }
+
+    return [
+        'block_id' => $blockId,
+        'quantity' => world_clamp_int((int) $quantity, 1, WORLD_MAX_STACK_SIZE),
+        'x' => round($x, 3),
+        'y' => round($y, 3),
+        'z' => round($z, 3),
+    ];
+}
+
+function world_normalize_item_drops($drops): array
+{
+    if (!is_array($drops)) {
+        return [];
+    }
+
+    $result = [];
+    foreach ($drops as $drop) {
+        $normalized = world_normalize_item_drop($drop);
+        if ($normalized !== null) {
+            $result[] = $normalized;
+        }
+    }
+
+    return array_slice($result, 0, 128);
+}
+
 function world_normalize_mutations($mutations): ?array
 {
     if (!is_array($mutations)) {
@@ -337,6 +403,8 @@ function normalize_world_save_state(?array $state): ?array
 
     $rawHealth = filter_var($player['health'] ?? WORLD_PLAYER_MAX_HEALTH, FILTER_VALIDATE_INT);
     $health = $rawHealth === false ? WORLD_PLAYER_MAX_HEALTH : world_clamp_int((int) $rawHealth, 0, WORLD_PLAYER_MAX_HEALTH);
+    $rawHunger = filter_var($player['hunger'] ?? WORLD_PLAYER_MAX_HUNGER, FILTER_VALIDATE_INT);
+    $hunger = $rawHunger === false ? WORLD_PLAYER_MAX_HUNGER : world_clamp_int((int) $rawHunger, 0, WORLD_PLAYER_MAX_HUNGER);
     $dead = world_normalize_bool($player['dead'] ?? false) || $health <= 0;
     $flyEnabled = world_normalize_bool($player['fly_enabled'] ?? false);
     $flyActive = $flyEnabled && world_normalize_bool($player['fly_active'] ?? false);
@@ -344,6 +412,7 @@ function normalize_world_save_state(?array $state): ?array
 
     return [
         'schema_version' => WORLD_SAVE_SCHEMA_VERSION,
+        'game_mode' => world_normalize_game_mode($state['game_mode'] ?? 'survival'),
         'player' => [
             'position' => [
                 'x' => round($x, 3),
@@ -356,6 +425,7 @@ function normalize_world_save_state(?array $state): ?array
             ],
             'selected_hotbar_index' => $selectedHotbarIndex,
             'health' => $dead ? 0 : $health,
+            'hunger' => $hunger,
             'max_health' => WORLD_PLAYER_MAX_HEALTH,
             'dead' => $dead ? 1 : 0,
             'fly_enabled' => $flyEnabled ? 1 : 0,
@@ -367,6 +437,7 @@ function normalize_world_save_state(?array $state): ?array
         ],
         'world' => [
             'block_mutations' => $mutations,
+            'item_drops' => world_normalize_item_drops($world['item_drops'] ?? []),
         ],
     ];
 }
@@ -624,9 +695,8 @@ function load_world_chunks_by_world_id_and_coords(funcoesPDO $service, int $worl
     );
 }
 
-function save_world_chunks(funcoesPDO $service, int $worldId, array $chunks): array
+function save_world_chunks(funcoesPDO $service, int $worldId, array $normalizedChunks): array
 {
-    $normalizedChunks = world_normalize_chunk_payloads($chunks);
     if ($normalizedChunks === []) {
         return [
             'saved_count' => 0,

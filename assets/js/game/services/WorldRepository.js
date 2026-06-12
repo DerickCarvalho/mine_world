@@ -1,9 +1,11 @@
 import { decodeChunkData, encodeChunkData } from '../world/ChunkCodec.js';
-import { getBlockIdByKey, getBlockKeyById, getBlockMaxStack, isPlaceableBlock } from '../world/BlockTypes.js';
+import { getBlockIdByKey, getBlockKeyById, getBlockMaxStack, isCollectableBlock } from '../world/BlockTypes.js';
+import { normalizeGameMode } from '../core/GameModeRules.js';
 import { DEFAULT_USER_CONFIG, WORLD_CONFIG, normalizeRuntimeConfig } from '../world/WorldConfig.js';
 
 const SAVE_SCHEMA_VERSION = 3;
 const INVENTORY_SLOT_COUNT = 27;
+const CHUNK_API_TIMEOUT_MS = 60000;
 
 function isFiniteNumber(value) {
     return typeof value === 'number' && Number.isFinite(value);
@@ -19,7 +21,7 @@ function normalizeInventorySlot(slot) {
     }
 
     const blockId = getBlockIdByKey(slot.block_id);
-    if (!isPlaceableBlock(blockId)) {
+    if (blockId === 0 || !isCollectableBlock(blockId)) {
         return null;
     }
 
@@ -43,6 +45,52 @@ function normalizeInventorySlots(slots) {
     }
 
     return normalized;
+}
+
+function normalizeWorldDrops(drops) {
+    if (!Array.isArray(drops)) {
+        return [];
+    }
+
+    const result = [];
+    let sequence = 0;
+
+    for (const drop of drops) {
+        if (!drop || typeof drop !== 'object') {
+            continue;
+        }
+
+        const blockId = getBlockIdByKey(drop.block_id);
+        if (blockId === 0 || !isCollectableBlock(blockId)) {
+            continue;
+        }
+
+        const x = Number(drop.x);
+        const y = Number(drop.y);
+        const z = Number(drop.z);
+
+        if (!isFiniteNumber(x) || !isFiniteNumber(y) || !isFiniteNumber(z)) {
+            continue;
+        }
+
+        const quantity = Math.max(1, Math.min(64, Math.floor(Number(drop.quantity || 1))));
+        sequence += 1;
+
+        result.push({
+            id: 'drop-' + sequence,
+            block_id: getBlockKeyById(blockId),
+            quantity: quantity,
+            x: Number(x.toFixed(3)),
+            y: Number(y.toFixed(3)),
+            z: Number(z.toFixed(3))
+        });
+
+        if (result.length >= 128) {
+            break;
+        }
+    }
+
+    return result;
 }
 
 function normalizeMutations(mutations) {
@@ -127,12 +175,14 @@ function normalizeSaveState(saveState) {
     const health = dead
         ? 0
         : Math.max(0, Math.min(WORLD_CONFIG.maxHealth, Number.isFinite(rawHealth) ? rawHealth : WORLD_CONFIG.maxHealth));
+    const hunger = Math.max(0, Math.min(WORLD_CONFIG.maxHunger, Math.floor(Number(player.hunger ?? WORLD_CONFIG.maxHunger))));
     const flyEnabled = normalizeBooleanFlag(player.fly_enabled);
     const flyActive = flyEnabled && normalizeBooleanFlag(player.fly_active);
     const spawnPosition = normalizeSpawnPosition(player.spawn_position);
 
     return {
         schema_version: SAVE_SCHEMA_VERSION,
+        game_mode: normalizeGameMode(saveState.game_mode),
         player: {
             position: {
                 x: Number(x.toFixed(3)),
@@ -145,6 +195,7 @@ function normalizeSaveState(saveState) {
             },
             selected_hotbar_index: selectedHotbarIndex,
             health: health,
+            hunger: hunger,
             max_health: WORLD_CONFIG.maxHealth,
             dead: dead ? 1 : 0,
             fly_enabled: flyEnabled ? 1 : 0,
@@ -155,7 +206,8 @@ function normalizeSaveState(saveState) {
             slots: normalizeInventorySlots(inventory.slots)
         },
         world: {
-            block_mutations: normalizeMutations(world.block_mutations || world.modified_blocks)
+            block_mutations: normalizeMutations(world.block_mutations || world.modified_blocks),
+            item_drops: normalizeWorldDrops(world.item_drops)
         },
         saved_at: saveState.saved_at || null
     };
@@ -255,7 +307,8 @@ export class WorldRepository {
                 };
             })
         }, {
-            showLoading: false
+            showLoading: false,
+            timeoutMs: CHUNK_API_TIMEOUT_MS
         });
 
         if (!payload || payload.status !== 'OK' || !payload.data) {
@@ -308,7 +361,8 @@ export class WorldRepository {
                 };
             })
         }, {
-            showLoading: false
+            showLoading: false,
+            timeoutMs: CHUNK_API_TIMEOUT_MS
         });
 
         if (!payload || payload.status !== 'OK' || !payload.data) {

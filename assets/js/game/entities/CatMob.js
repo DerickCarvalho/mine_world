@@ -100,6 +100,8 @@ export class CatMob {
         this.hurtTime = 0;
         this.attackCooldown = 0;
         this.yaw = 0;
+        this.maxHealth = 4;
+        this.health = this.maxHealth;
         this.speed = 2.1;
         this.chaseSpeed = 3.15;
         this.cachedRenderable = null;
@@ -139,6 +141,15 @@ export class CatMob {
         this.wanderTarget = null;
         this.wanderTimer = 0;
         this.attackCooldown = 0;
+        this.health = this.maxHealth;
+    }
+
+    isAlive() {
+        return this.health > 0;
+    }
+
+    getDrops() {
+        return [{ block_id: 'fang', quantity: 1 }];
     }
 
     toggleFollow() {
@@ -152,12 +163,13 @@ export class CatMob {
         return this.following;
     }
 
-    takeHit(attackerPosition) {
+    takeHit(attackerPosition, damage = 1) {
         this.hurtTime = 0.34;
         this.aggressive = true;
         this.following = false;
         this.wanderTarget = null;
         this.wanderTimer = 0;
+        this.health = Math.max(0, this.health - Math.max(1, Math.floor(Number(damage || 1))));
 
         if (attackerPosition) {
             const deltaX = attackerPosition.x - this.position.x;
@@ -167,9 +179,18 @@ export class CatMob {
                 this.yaw = Math.atan2(-deltaX, deltaZ);
             }
         }
+
+        return {
+            dead: this.health <= 0,
+            health: this.health
+        };
     }
 
     update(deltaTime, playerPosition, world, isWalkable) {
+        if (!this.isAlive()) {
+            return null;
+        }
+
         this.animationTime += deltaTime * (this.aggressive ? 8 : (this.following ? 6 : 3.5));
         this.hurtTime = Math.max(0, this.hurtTime - deltaTime);
         this.attackCooldown = Math.max(0, this.attackCooldown - deltaTime);
@@ -181,6 +202,8 @@ export class CatMob {
                 return {
                     type: 'player_hit',
                     damage: 1,
+                    cause: 'cat',
+                    entityType: 'cat',
                     source: {
                         x: this.position.x,
                         y: this.position.y,
@@ -278,7 +301,8 @@ export class CatMob {
             legSwing.toFixed(3),
             tailLift.toFixed(3),
             hurtPulse.toFixed(3),
-            this.aggressive ? 1 : 0
+            this.aggressive ? 1 : 0,
+            this.health
         ].join('|');
 
         if (this.cachedRenderable && this.cachedPoseKey === poseKey) {

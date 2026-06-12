@@ -7,6 +7,8 @@ export class InputState {
         this.right = false;
         this.jump = false;
         this.descend = false;
+        this.sprint = false;
+        this.crouch = false;
         this.lookDeltaX = 0;
         this.lookDeltaY = 0;
         this.locked = false;
@@ -16,6 +18,7 @@ export class InputState {
         this.inventoryToggleRequested = false;
         this.chatToggleRequested = false;
         this.primaryActionRequested = false;
+        this.primaryHeld = false;
         this.secondaryActionRequested = false;
         this.toggleFlightRequested = false;
         this.hotbarIndexRequested = null;
@@ -30,6 +33,7 @@ export class InputState {
         this.handleKeyUp = this.handleKeyUp.bind(this);
         this.handleWindowBlur = this.handleWindowBlur.bind(this);
         this.handleMouseDown = this.handleMouseDown.bind(this);
+        this.handleMouseUp = this.handleMouseUp.bind(this);
         this.handleContextMenu = this.handleContextMenu.bind(this);
         this.handleWheel = this.handleWheel.bind(this);
     }
@@ -40,6 +44,7 @@ export class InputState {
         window.addEventListener('blur', this.handleWindowBlur);
         document.addEventListener('pointerlockchange', this.handlePointerLockChange);
         document.addEventListener('mousemove', this.handleMouseMove);
+        document.addEventListener('mouseup', this.handleMouseUp);
         this.targetElement.addEventListener('click', this.handleClick);
         this.targetElement.addEventListener('mousedown', this.handleMouseDown);
         this.targetElement.addEventListener('contextmenu', this.handleContextMenu);
@@ -52,6 +57,7 @@ export class InputState {
         window.removeEventListener('blur', this.handleWindowBlur);
         document.removeEventListener('pointerlockchange', this.handlePointerLockChange);
         document.removeEventListener('mousemove', this.handleMouseMove);
+        document.removeEventListener('mouseup', this.handleMouseUp);
         this.targetElement.removeEventListener('click', this.handleClick);
         this.targetElement.removeEventListener('mousedown', this.handleMouseDown);
         this.targetElement.removeEventListener('contextmenu', this.handleContextMenu);
@@ -60,6 +66,8 @@ export class InputState {
         if (document.pointerLockElement === this.targetElement) {
             document.exitPointerLock();
         }
+
+        this.clearTransientInput();
     }
 
     setGameplayEnabled(enabled) {
@@ -89,6 +97,7 @@ export class InputState {
         this.lookDeltaX = 0;
         this.lookDeltaY = 0;
         this.primaryActionRequested = false;
+        this.primaryHeld = false;
         this.secondaryActionRequested = false;
         this.toggleFlightRequested = false;
     }
@@ -100,6 +109,8 @@ export class InputState {
         this.right = false;
         this.jump = false;
         this.descend = false;
+        this.sprint = false;
+        this.crouch = false;
     }
 
     isTextEntryActive() {
@@ -144,6 +155,7 @@ export class InputState {
 
         if (event.button === 0) {
             this.primaryActionRequested = true;
+            this.primaryHeld = true;
             event.preventDefault();
             return;
         }
@@ -151,6 +163,12 @@ export class InputState {
         if (event.button === 2) {
             this.secondaryActionRequested = true;
             event.preventDefault();
+        }
+    }
+
+    handleMouseUp(event) {
+        if (event.button === 0) {
+            this.primaryHeld = false;
         }
     }
 
@@ -227,14 +245,31 @@ export class InputState {
 
         if (event.code === 'KeyW') {
             this.forward = true;
+            if (event.ctrlKey) {
+                event.preventDefault();
+            }
         } else if (event.code === 'KeyS') {
             this.backward = true;
+            if (event.ctrlKey) {
+                event.preventDefault();
+            }
         } else if (event.code === 'KeyA') {
             this.left = true;
+            if (event.ctrlKey) {
+                event.preventDefault();
+            }
         } else if (event.code === 'KeyD') {
             this.right = true;
+            if (event.ctrlKey) {
+                event.preventDefault();
+            }
         } else if (event.code === 'ShiftLeft' || event.code === 'ShiftRight') {
             this.descend = true;
+            this.crouch = true;
+            event.preventDefault();
+        } else if (event.code === 'ControlLeft' || event.code === 'ControlRight') {
+            this.sprint = true;
+            event.preventDefault();
         } else if (event.code === 'Space') {
             if (!event.repeat) {
                 const now = Date.now();
@@ -268,6 +303,10 @@ export class InputState {
             this.right = false;
         } else if (event.code === 'ShiftLeft' || event.code === 'ShiftRight') {
             this.descend = false;
+            this.crouch = false;
+            event.preventDefault();
+        } else if (event.code === 'ControlLeft' || event.code === 'ControlRight') {
+            this.sprint = false;
         } else if (event.code === 'Space') {
             this.jump = false;
             event.preventDefault();
@@ -292,6 +331,7 @@ export class InputState {
             toggleInventory: this.inventoryToggleRequested,
             toggleChat: this.chatToggleRequested,
             primaryAction: this.primaryActionRequested,
+            primaryHeld: this.primaryHeld,
             secondaryAction: this.secondaryActionRequested,
             toggleFlight: this.toggleFlightRequested,
             hotbarIndex: this.hotbarIndexRequested,

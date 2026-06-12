@@ -1,4 +1,5 @@
 ﻿import { WORLD_CONFIG, clampNumber } from '../world/WorldConfig.js';
+import { BLOCK_TYPES } from '../world/BlockTypes.js';
 
 export class CollisionResolver {
     constructor(world) {
@@ -92,17 +93,43 @@ export class CollisionResolver {
         return !this.collidesBody(x, footY, z);
     }
 
-    resolveHorizontal(position, deltaX, deltaZ) {
+    isBodyInWater(position) {
+        const sampleHeights = [
+            position.y + 0.1,
+            position.y + WORLD_CONFIG.playerHeight * 0.55,
+            position.y + WORLD_CONFIG.playerHeight - 0.1
+        ];
+
+        return sampleHeights.some((sampleY) => (
+            this.world.getBlockIdAtBlock(Math.floor(position.x), Math.floor(sampleY), Math.floor(position.z)) === BLOCK_TYPES.water
+        ));
+    }
+
+    hasCrouchSupport(x, z, footY) {
+        const searchY = Math.max(0, Math.min(WORLD_CONFIG.height - 1, Math.ceil(footY + WORLD_CONFIG.stepHeight)));
+
+        return this.getSamplePoints(x, z).every((point) => {
+            if (!this.world.isInsideWorld(point.x, point.z)) {
+                return false;
+            }
+
+            const supportHeight = this.world.getHighestSolidBelow(point.x, point.z, searchY) + 1;
+            return supportHeight >= footY - WORLD_CONFIG.crouchEdgeTolerance;
+        });
+    }
+
+    resolveHorizontal(position, deltaX, deltaZ, options = {}) {
         let nextX = position.x;
         let nextZ = position.z;
+        const protectEdges = options.protectEdges === true;
 
         const resolvedX = this.canOccupy(position.x + deltaX, position.z, position.y);
-        if (resolvedX.canOccupy) {
+        if (resolvedX.canOccupy && (!protectEdges || this.hasCrouchSupport(position.x + deltaX, position.z, position.y))) {
             nextX = this.clampHorizontal(position.x + deltaX, 'x');
         }
 
         const resolvedZ = this.canOccupy(nextX, position.z + deltaZ, position.y);
-        if (resolvedZ.canOccupy) {
+        if (resolvedZ.canOccupy && (!protectEdges || this.hasCrouchSupport(nextX, position.z + deltaZ, position.y))) {
             nextZ = this.clampHorizontal(position.z + deltaZ, 'z');
         }
 

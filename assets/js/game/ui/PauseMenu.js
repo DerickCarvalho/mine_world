@@ -22,9 +22,12 @@ export class PauseMenu {
         this.loadedChunks = root ? root.querySelector('[data-pause-loaded-chunks]') : null;
         this.cachedChunks = root ? root.querySelector('[data-pause-cached-chunks]') : null;
         this.playerPosition = root ? root.querySelector('[data-pause-player-position]') : null;
+        this.gameMode = root ? root.querySelector('[data-pause-game-mode]') : null;
+        this.toggleModeButton = root ? root.querySelector('[data-pause-toggle-mode]') : null;
         this.onResume = null;
         this.onSaveAndExit = null;
         this.onApplySettings = null;
+        this.onToggleGameMode = null;
         this.saving = false;
         this.settingsRequestVersion = 0;
 
@@ -45,6 +48,16 @@ export class PauseMenu {
                 }
 
                 this.onSaveAndExit();
+            });
+        }
+
+        if (this.toggleModeButton) {
+            this.toggleModeButton.addEventListener('click', () => {
+                if (this.saving || typeof this.onToggleGameMode !== 'function') {
+                    return;
+                }
+
+                this.onToggleGameMode();
             });
         }
 
@@ -108,6 +121,7 @@ export class PauseMenu {
         setText(this.worldAlgorithm, payload.algorithmVersion, '-');
         setText(this.loadedChunks, String(payload.loadedChunks ?? 0), '0');
         setText(this.cachedChunks, String(payload.cachedChunks ?? 0), '0');
+        setText(this.gameMode, payload.gameMode, 'survival');
 
         if (this.playerPosition) {
             const position = payload.position && typeof payload.position === 'object'
@@ -191,6 +205,10 @@ export class PauseMenu {
         if (this.saveButton) {
             this.saveButton.disabled = this.saving;
             this.saveButton.textContent = this.saving ? 'Salvando...' : 'Salvar e sair';
+        }
+
+        if (this.toggleModeButton) {
+            this.toggleModeButton.disabled = this.saving;
         }
 
         if (!this.settingsForm) {

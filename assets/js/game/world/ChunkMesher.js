@@ -131,6 +131,15 @@ function createFaceUvs(width, height) {
     ];
 }
 
+function createVerticalFaceUvs(width, height) {
+    return [
+        { u: 0, v: height },
+        { u: width, v: height },
+        { u: width, v: 0 },
+        { u: 0, v: 0 }
+    ];
+}
+
 export class ChunkMesher {
     constructor(world) {
         this.world = world;
@@ -240,7 +249,7 @@ export class ChunkMesher {
                 const worldX = startX + u;
                 const worldZ = startZ + v;
                 const planeY = direction === 'top' ? cell.y + 1 : cell.y;
-                const uvs = createFaceUvs(quadWidth, quadHeight);
+                const uvs = createVerticalFaceUvs(quadWidth, quadHeight);
 
                 faces.push(createFace([
                     { x: worldX, y: planeY, z: worldZ },
@@ -296,7 +305,7 @@ export class ChunkMesher {
                 const worldX = startX + u;
                 const planeZ = direction === 'north' ? startZ + cell.localZ : startZ + cell.localZ + 1;
                 const worldY = v;
-                const uvs = createFaceUvs(quadWidth, quadHeight);
+                const uvs = createVerticalFaceUvs(quadWidth, quadHeight);
 
                 if (direction === 'north') {
                     faces.push(createFace([

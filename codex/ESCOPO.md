@@ -43,7 +43,11 @@ Quando houver necessidade de persistencia de conta, configuracoes e mundos, a ca
 - PRD-008 implementada: HUD de sobrevivencia refinado, voo estavel, audio sintetizado, cache dormant de chunks e worldgen 2.0.
 - PRD-009 implementada: worldgen 3.0 com serras/rios suaves, HUD inferior mais proximo do Minecraft e fix do travamento do gato.
 - PRD-010 implementada: held item no lugar da mao, inventario 3D coerente com o mundo, worldgen 3.5 e escala/fisica do player revisadas.
-- Proxima frente apos PRD-011: crafting, progressao sandbox mais completa e expansao do sistema de comandos.
+- PRD-012 implementada: consolidar a experiencia sandbox com renderer WebGL, pipeline assincrono de chunks, movimento refinado, interacoes progressivas e inventario por pilhas.
+- PRD-013 em validacao: polir camera vertical, held item, mao vazia, mob base e worldgen para aproximar a leitura de um sandbox voxel mais maduro.
+- PRD-014 em validacao: ampliar o jogo com blocos, minerios, crafting, modos de jogo, estruturas, mobs e fechamento do fluxo visual de itens/texturas.
+- PRD-015 em validacao: fechar a paridade survival basica com camera madura, outline correto, fome, combate, drops, mobs melhores e worldgen mais convincente.
+- Crafting e progressao sandbox completa passam a ser frente principal da PRD-014, enquanto a elevacao de acabamento survival passa a ser frente principal da PRD-015.
 
 ## Regras de Produto Consolidadas
 
@@ -108,13 +112,17 @@ Quando houver necessidade de persistencia de conta, configuracoes e mundos, a ca
 | PRD-009 | Worldgen 3.0, HUD Minecraft-like e fix do gato | Implementada | PRD-008 | Substituir o algoritmo por `v3` para novos mundos, suavizar serras e rios, aproximar o HUD da referencia visual alvo e remover o travamento do gato. |
 | PRD-010 | Held item, inventario 3D e worldgen 3.5 | Implementada | PRD-009 | Remover a mao visivel, reaproveitar as texturas do mundo nos itens da UI, migrar novos mundos para `v3.5` e revisar escala/fisica do player. |
 | PRD-011 | Estabilidade de runtime, worldgen 4.0 e HUD central | Implementada | PRD-010 | Corrigir cache dormant/unload de chunks, reduzir picos no main thread, migrar novos mundos para `v4.0` e centralizar a hotbar. |
+| PRD-012 | Experiencia sandbox fundamentada | Implementada | PRD-010, PRD-011, DT-001 | Migrar o runtime para GPU/Worker e tornar movimento, interacao, inventario e feedback mais fluidos, previsiveis e proximos de um sandbox voxel maduro. |
+| PRD-013 | Polimento visual, camera livre e worldgen 4.1 | Em validacao | PRD-010, PRD-011, PRD-012 | Polir a camera vertical, o held item, a leitura de mao vazia, o mob base e a geracao procedural para mundos novos. |
+| PRD-014 | Sobrevivencia, crafting e mundo vivo | Em validacao | PRD-012, PRD-013 | Introduzir progressao por recursos, crafting, modos de jogo, estruturas, mais mobs e consolidacao visual de inventario/texturas. |
+| PRD-015 | Survival classico, combate e UX voxel madura | Em validacao | PRD-013, PRD-014 | Fechar camera, outline, worldgen, fome, combate, morte de mobs, drops e polimento visual para um survival voxel mais coeso. |
 
 ## Historico de Requisitos Consolidados
 
 | Tema | Requisito vigente | Substitui | Origem |
 |------|-------------------|-----------|--------|
-| Worldgen de mundos novos | `algorithm_version = v4.0` | `v2`, `v3` e `v3.5` como defaults de novos mundos | PRD-011 |
-| Item em primeira pessoa | Exibir held item selecionado, sem mao visivel | Mao/braco visivel das PRDs 005 e 008 | PRD-010 |
+| Worldgen de mundos novos | `algorithm_version = v4.0` ate a execucao da PRD-013 | `v2`, `v3` e `v3.5` como defaults de novos mundos | PRD-011 |
+| Item em primeira pessoa | Exibir held item selecionado, sem mao visivel, com mao vazia prevista em polimento posterior | Mao/braco visivel das PRDs 005 e 008 | PRD-010, PRD-013 |
 | HUD inferior | Hotbar e metadata strip centralizadas | Posicionamentos anteriores da HUD | PRD-011 |
 | Cache de chunks | Cache dormant inicializado, sincronizado e reidratavel | Implementacao incompleta introduzida anteriormente | PRD-011 |
 
@@ -122,16 +130,17 @@ Quando houver necessidade de persistencia de conta, configuracoes e mundos, a ca
 
 | ID | Titulo | Status | PRD de origem | Resumo |
 |----|--------|--------|---------------|--------|
-| - | Nenhum debito tecnico registrado | - | - | Criar novos itens com `$dt`. |
+| DT-001 | Timeout na criacao e pre-geracao inicial de mundo | Concluida | PRD-006, PRD-011 | Corrigir gargalo no salvamento inicial de chunks e separar sucesso do cadastro da preparacao. |
 
 ## Fora do Escopo Atual
 
 - Multiplayer
-- Crafting, fornalha e ferramentas completas
+- Fornalha, ferramentas completas e combate avancado
 - Conta social, recuperacao de senha e email transacional
 
 ## Backlog de Curto Prazo
 
 - Expandir o catalogo de comandos validaveis alem de teleporte e fly
 - Planejar persistencia e interacoes mais ricas para mobs
-- Planejar progressao sandbox depois do primeiro loop de construcao persistente
+- Planejar ferramentas, fornalha e progressao de equipamento depois da primeira camada de crafting e estruturas
+- Planejar ciclo de dia/noite, spawn rules avancadas e durabilidade apos o fechamento da PRD-015

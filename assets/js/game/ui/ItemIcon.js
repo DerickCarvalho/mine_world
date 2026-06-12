@@ -1,4 +1,4 @@
-﻿import { getBlockDefinitionByKey, getBlockFaceBaseColor } from '../world/BlockTypes.js';
+import { getBlockDefinitionByKey, getBlockFaceBaseColor, isPlaceableBlock } from '../world/BlockTypes.js';
 import { getBlockTextureCatalog } from '../world/ChunkMaterials.js';
 
 function escapeHtml(value) {
@@ -22,25 +22,33 @@ function buildFaceStyle(blockKey, faceKey) {
     if (texture && texture.path) {
         const textureUrl = new URL(texture.path, window.ENV.DOMAIN + '/').toString();
         style += 'background-image: url(&quot;' + escapeHtml(textureUrl) + '&quot;);';
-        style += 'background-size: cover; background-position: center;';
+        style += 'background-size: 100% 100%; background-position: center; background-repeat: repeat;';
     }
 
     return style;
 }
 
-export function renderItemIconMarkup(blockKey, sizeClass) {
+export function renderItemIconMarkup(blockKey, sizeClass, variant) {
     if (!blockKey) {
         return '<span class="game-item-icon game-item-icon--empty"></span>';
     }
 
     const definition = getBlockDefinitionByKey(blockKey);
     const iconSizeClass = sizeClass ? ' ' + sizeClass : '';
+    const variantClass = variant ? ' game-item-icon--' + escapeHtml(variant) : '';
 
-    return '<span class="game-item-icon' + iconSizeClass + '" aria-hidden="true" title="' + escapeHtml(definition.name) + '">'
+    if (!isPlaceableBlock(definition.id)) {
+        return '<span class="game-item-icon game-item-icon--flat game-item-icon--item-' + escapeHtml(definition.key) + iconSizeClass + variantClass + '" aria-hidden="true" title="' + escapeHtml(definition.name) + '">'
+            + '<span class="game-item-icon__flat"></span>'
+            + '</span>';
+    }
+
+    return '<span class="game-item-icon' + iconSizeClass + variantClass + '" aria-hidden="true" title="' + escapeHtml(definition.name) + '">'
         + '<span class="game-item-icon__cube">'
         + '<span class="game-item-icon__face game-item-icon__face--top" style="' + buildFaceStyle(definition.key, 'top') + '"></span>'
         + '<span class="game-item-icon__face game-item-icon__face--front" style="' + buildFaceStyle(definition.key, 'side') + '"></span>'
         + '<span class="game-item-icon__face game-item-icon__face--side" style="' + buildFaceStyle(definition.key, 'side') + '"></span>'
+        + '<span class="game-item-icon__shine"></span>'
         + '</span>'
         + '</span>';
 }

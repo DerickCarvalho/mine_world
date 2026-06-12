@@ -112,6 +112,16 @@ export class MutableWorld {
         return new Uint8Array(snapshot.data);
     }
 
+    peekChunkDataCopy(chunkX, chunkZ) {
+        const key = this.getChunkKey(chunkX, chunkZ);
+        const snapshot = this.chunkCache.get(key) || this.dormantChunkCache.get(key);
+        if (!snapshot) {
+            return null;
+        }
+
+        return new Uint8Array(snapshot.data);
+    }
+
     unloadChunk(chunkX, chunkZ) {
         const key = this.getChunkKey(chunkX, chunkZ);
         const snapshot = this.chunkCache.get(key);
@@ -167,7 +177,7 @@ export class MutableWorld {
                         continue;
                     }
 
-                    let blockId = BLOCK_TYPES.stone;
+                    let blockId = this.terrain.getSubsurfaceBlockIdAt(worldX, y, worldZ, surfaceHeight);
                     if (y === surfaceHeight - 1) {
                         blockId = profile.topBlockId;
                     } else if (y >= surfaceHeight - 4) {
@@ -412,6 +422,44 @@ export class MutableWorld {
                 block_id: getBlockKeyById(mutation.blockId)
             };
         });
+    }
+
+    getSerializedMutationsForChunks(chunks) {
+        const serialized = [];
+        const seen = new Set();
+
+        for (const chunk of Array.isArray(chunks) ? chunks : []) {
+            if (!chunk) {
+                continue;
+            }
+
+            const chunkKey = this.getChunkKey(Number(chunk.chunkX), Number(chunk.chunkZ));
+            const mutationKeys = this.mutationChunkIndex.get(chunkKey);
+            if (!mutationKeys) {
+                continue;
+            }
+
+            for (const mutationKey of mutationKeys) {
+                if (seen.has(mutationKey)) {
+                    continue;
+                }
+
+                const mutation = this.mutationValues.get(mutationKey);
+                if (!mutation) {
+                    continue;
+                }
+
+                serialized.push({
+                    x: mutation.x,
+                    y: mutation.y,
+                    z: mutation.z,
+                    block_id: getBlockKeyById(mutation.blockId)
+                });
+                seen.add(mutationKey);
+            }
+        }
+
+        return serialized;
     }
 
     canCollectBlock(blockId) {

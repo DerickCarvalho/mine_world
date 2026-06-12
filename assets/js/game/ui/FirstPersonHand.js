@@ -6,6 +6,7 @@ export class FirstPersonHand {
         this.motion = 0;
         this.useTime = 0;
         this.currentKey = '';
+        this.mode = 'survival';
     }
 
     show() {
@@ -20,20 +21,26 @@ export class FirstPersonHand {
         }
     }
 
-    setItem(slot) {
+    setItem(slot, gameMode = 'survival') {
         if (!this.root) {
             return;
         }
 
+        this.mode = String(gameMode || 'survival');
         const nextKey = slot && slot.block_id ? String(slot.block_id) : '';
         if (nextKey === this.currentKey) {
             return;
         }
 
         this.currentKey = nextKey;
+        this.root.dataset.state = nextKey ? 'item' : 'empty';
         this.root.innerHTML = nextKey
-            ? '<div class="game-held-item__model">' + renderItemIconMarkup(nextKey, 'game-item-icon--held') + '</div>'
-            : '';
+            ? '<div class="game-held-item__model">' + renderItemIconMarkup(nextKey, 'game-item-icon--held', 'equipped') + '</div>'
+            : '<div class="game-held-item__empty-hand" aria-hidden="true">'
+                + '<span class="game-held-item__empty-palm"></span>'
+                + '<span class="game-held-item__empty-thumb"></span>'
+                + '<span class="game-held-item__empty-sleeve"></span>'
+                + '</div>';
     }
 
     triggerUse() {
@@ -45,7 +52,7 @@ export class FirstPersonHand {
             return;
         }
 
-        if (!isVisible || !this.currentKey) {
+        if (!isVisible) {
             this.hide();
             return;
         }
@@ -59,13 +66,16 @@ export class FirstPersonHand {
         this.motion += deltaTime * (2.2 + walkFactor * 5.2);
         this.useTime = Math.max(0, this.useTime - deltaTime);
 
-        const bobX = Math.sin(this.motion) * 8 * walkFactor;
-        const bobY = Math.abs(Math.cos(this.motion * 0.86)) * 7 * walkFactor;
+        const bobX = Math.sin(this.motion) * 6 * walkFactor;
+        const bobY = Math.abs(Math.cos(this.motion * 0.86)) * 5 * walkFactor;
         const useFactor = this.useTime > 0 ? Math.sin((1 - this.useTime / 0.18) * Math.PI) : 0;
-        const translateX = 8 + bobX - useFactor * 16;
-        const translateY = -4 + bobY + useFactor * 12 + (flying ? -4 : 0);
-        const rotateZ = -18 + bobX * 0.16 - useFactor * 10;
-        const rotateX = -12 - useFactor * 6;
+        const emptyHand = !this.currentKey;
+        const translateX = emptyHand ? -8 + bobX * 0.55 : 2 + bobX - useFactor * 10;
+        const translateY = emptyHand
+            ? -8 + bobY * 0.65 + (flying ? -3 : 0)
+            : -20 + bobY + useFactor * 8 + (flying ? -4 : 0);
+        const rotateZ = emptyHand ? (-15 + bobX * 0.2) : (-10 + bobX * 0.12 - useFactor * 8);
+        const rotateX = emptyHand ? (-14 - walkFactor * 6) : (-8 - useFactor * 5);
 
         this.root.style.transform = 'translate3d(' + translateX + 'px, ' + translateY + 'px, 0) rotateZ(' + rotateZ + 'deg) rotateX(' + rotateX + 'deg)';
     }

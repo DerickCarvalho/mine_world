@@ -6,6 +6,8 @@ const SKY_TOP = '#76c7ff';
 const SKY_BOTTOM = '#caecff';
 const HORIZON = '#8bb873';
 const BLOCK_HIGHLIGHT = 'rgba(255, 248, 171, 0.92)';
+const PLACEMENT_VALID = 'rgba(112, 255, 157, 0.94)';
+const PLACEMENT_BLOCKED = 'rgba(255, 105, 105, 0.94)';
 
 function mixColor(start, end, amount) {
     return Math.round(start + (end - start) * amount);
@@ -355,6 +357,13 @@ export class SoftwareRenderer {
         if (highlight && highlight.block) {
             this.drawBlockOutline(transform, highlight.block);
         }
+        if (highlight && highlight.placementPreview) {
+            this.drawBlockOutline(
+                transform,
+                highlight.placementPreview.cell,
+                highlight.placementPreview.valid ? PLACEMENT_VALID : PLACEMENT_BLOCKED
+            );
+        }
     }
 
     drawTexturedQuad(points, uvs, source) {
@@ -428,7 +437,7 @@ export class SoftwareRenderer {
         this.context.restore();
     }
 
-    drawBlockOutline(transform, block) {
+    drawBlockOutline(transform, block, color = BLOCK_HIGHLIGHT) {
         const vertices = [
             { x: block.x, y: block.y, z: block.z },
             { x: block.x + 1, y: block.y, z: block.z },
@@ -446,7 +455,7 @@ export class SoftwareRenderer {
             [0, 4], [1, 5], [2, 6], [3, 7]
         ];
 
-        this.context.strokeStyle = BLOCK_HIGHLIGHT;
+        this.context.strokeStyle = color;
         this.context.lineWidth = 2;
 
         for (const edge of edges) {

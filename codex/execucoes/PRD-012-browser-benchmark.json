@@ -1,0 +1,530 @@
+{
+  "status": "Explorando o terreno.",
+  "integratedSmoke": {
+    "inventory": true,
+    "placement": true,
+    "breaking": true,
+    "water": true,
+    "saveResume": true,
+    "deathRespawn": true
+  },
+  "traversal": {
+    "schemaVersion": 1,
+    "capturedAt": "2026-06-12T02:39:58.323Z",
+    "elapsedMs": 5178.3,
+    "metadata": {
+      "worldId": 41,
+      "algorithmVersion": "v4.0",
+      "viewport": "1920x1080",
+      "renderDistance": 6,
+      "renderer": "WebGLRenderer",
+      "loadedChunks": 9,
+      "pendingChunks": 40,
+      "memory": {
+        "usedHeapBytes": 82053130,
+        "totalHeapBytes": 122943874,
+        "heapLimitBytes": 4395630592
+      }
+    },
+    "frames": {
+      "count": 291,
+      "averageMs": 17.96,
+      "minMs": 16.6,
+      "maxMs": 50,
+      "p50Ms": 16.7,
+      "p95Ms": 33.4,
+      "fps": 55.68
+    },
+    "longTasks": {
+      "count": 1,
+      "averageMs": 59,
+      "minMs": 59,
+      "maxMs": 59,
+      "p50Ms": 59,
+      "p95Ms": 59,
+      "thresholdMs": 50,
+      "perMinute": 11.59,
+      "entries": [
+        {
+          "durationMs": 59,
+          "recordedAtMs": 5.9,
+          "metadata": {
+            "source": "performance-observer",
+            "entryType": "longtask",
+            "name": "self"
+          }
+        }
+      ]
+    },
+    "chunkJobs": {
+      "count": 402,
+      "averageMs": 9.85,
+      "minMs": 0,
+      "maxMs": 76.4,
+      "p50Ms": 0.1,
+      "p95Ms": 66.6,
+      "entries": [
+        {
+          "name": "worker-generate",
+          "durationMs": 59,
+          "recordedAtMs": 1942.7,
+          "metadata": {
+            "key": "11,-1"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 60.2,
+          "recordedAtMs": 1997.9,
+          "metadata": {
+            "key": "11,1"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 56.8,
+          "recordedAtMs": 2055.2,
+          "metadata": {
+            "key": "11,-2"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 60.8,
+          "recordedAtMs": 2112.4,
+          "metadata": {
+            "key": "11,2"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 60.6,
+          "recordedAtMs": 2185.8,
+          "metadata": {
+            "key": "11,-3"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 54.9,
+          "recordedAtMs": 2242.8,
+          "metadata": {
+            "key": "11,3"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 57.1,
+          "recordedAtMs": 2298.2,
+          "metadata": {
+            "key": "12,0"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 63.4,
+          "recordedAtMs": 2355.3,
+          "metadata": {
+            "key": "12,-1"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 58.7,
+          "recordedAtMs": 2410.3,
+          "metadata": {
+            "key": "12,1"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 61.5,
+          "recordedAtMs": 2483.7,
+          "metadata": {
+            "key": "12,-2"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 68,
+          "recordedAtMs": 2538.3,
+          "metadata": {
+            "key": "12,2"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 76.4,
+          "recordedAtMs": 2613.2,
+          "metadata": {
+            "key": "12,-3"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 69.3,
+          "recordedAtMs": 2684.8,
+          "metadata": {
+            "key": "12,3"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 57.1,
+          "recordedAtMs": 2740.1,
+          "metadata": {
+            "key": "13,0"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 73.7,
+          "recordedAtMs": 2816.8,
+          "metadata": {
+            "key": "13,-1"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 68.1,
+          "recordedAtMs": 2891.8,
+          "metadata": {
+            "key": "13,1"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 69.5,
+          "recordedAtMs": 2950.9,
+          "metadata": {
+            "key": "13,-2"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 69.9,
+          "recordedAtMs": 3024,
+          "metadata": {
+            "key": "13,2"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 73,
+          "recordedAtMs": 3097.7,
+          "metadata": {
+            "key": "13,-3"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 67.1,
+          "recordedAtMs": 3171.6,
+          "metadata": {
+            "key": "13,3"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 66.1,
+          "recordedAtMs": 3240.7,
+          "metadata": {
+            "key": "14,0"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 72.7,
+          "recordedAtMs": 3311.3,
+          "metadata": {
+            "key": "14,-1"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 75.6,
+          "recordedAtMs": 3383.2,
+          "metadata": {
+            "key": "14,1"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 71.9,
+          "recordedAtMs": 3452.2,
+          "metadata": {
+            "key": "14,-2"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 62,
+          "recordedAtMs": 3528.2,
+          "metadata": {
+            "key": "14,2"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 68.5,
+          "recordedAtMs": 3585,
+          "metadata": {
+            "key": "14,-3"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 69.5,
+          "recordedAtMs": 3650.9,
+          "metadata": {
+            "key": "14,3"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 64.2,
+          "recordedAtMs": 3717.8,
+          "metadata": {
+            "key": "15,0"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 66.8,
+          "recordedAtMs": 3788.6,
+          "metadata": {
+            "key": "15,-1"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 66.6,
+          "recordedAtMs": 3847.8,
+          "metadata": {
+            "key": "15,1"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 72.6,
+          "recordedAtMs": 3922.4,
+          "metadata": {
+            "key": "15,-2"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 69.7,
+          "recordedAtMs": 4004.8,
+          "metadata": {
+            "key": "15,2"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 58.1,
+          "recordedAtMs": 4055.3,
+          "metadata": {
+            "key": "15,-3"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 67.3,
+          "recordedAtMs": 4123.2,
+          "metadata": {
+            "key": "15,3"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 71.4,
+          "recordedAtMs": 4193.8,
+          "metadata": {
+            "key": "16,0"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 63.6,
+          "recordedAtMs": 4257.3,
+          "metadata": {
+            "key": "16,-1"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 65.7,
+          "recordedAtMs": 4322.6,
+          "metadata": {
+            "key": "16,1"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 75.2,
+          "recordedAtMs": 4405.3,
+          "metadata": {
+            "key": "16,-2"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 64.9,
+          "recordedAtMs": 4473,
+          "metadata": {
+            "key": "16,2"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 62.7,
+          "recordedAtMs": 4523.8,
+          "metadata": {
+            "key": "16,-3"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 59.7,
+          "recordedAtMs": 4589.9,
+          "metadata": {
+            "key": "16,3"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 59.1,
+          "recordedAtMs": 4656.1,
+          "metadata": {
+            "key": "17,0"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 61.9,
+          "recordedAtMs": 4706,
+          "metadata": {
+            "key": "17,-1"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 66,
+          "recordedAtMs": 4772.7,
+          "metadata": {
+            "key": "17,1"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 57.9,
+          "recordedAtMs": 4839.5,
+          "metadata": {
+            "key": "17,-2"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 62.1,
+          "recordedAtMs": 4889.6,
+          "metadata": {
+            "key": "17,2"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 63.9,
+          "recordedAtMs": 4956,
+          "metadata": {
+            "key": "17,-3"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 59.9,
+          "recordedAtMs": 5023.3,
+          "metadata": {
+            "key": "17,3"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 59.7,
+          "recordedAtMs": 5073.9,
+          "metadata": {
+            "key": "18,0"
+          }
+        },
+        {
+          "name": "worker-generate",
+          "durationMs": 57.4,
+          "recordedAtMs": 5139.5,
+          "metadata": {
+            "key": "18,-1"
+          }
+        }
+      ]
+    }
+  },
+  "snapshot": {
+    "schemaVersion": 1,
+    "capturedAt": "2026-06-12T02:54:58.390Z",
+    "elapsedMs": 905245.1,
+    "metadata": {
+      "worldId": 41,
+      "algorithmVersion": "v4.0",
+      "viewport": "1920x1080",
+      "renderDistance": 6,
+      "renderer": "WebGLRenderer",
+      "loadedChunks": 49,
+      "pendingChunks": 0,
+      "memory": {
+        "usedHeapBytes": 48857294,
+        "totalHeapBytes": 51917470,
+        "heapLimitBytes": 4395630592
+      }
+    },
+    "frames": {
+      "count": 36000,
+      "averageMs": 17.02,
+      "minMs": 16.6,
+      "maxMs": 50.1,
+      "p50Ms": 16.7,
+      "p95Ms": 16.8,
+      "fps": 58.75
+    },
+    "longTasks": {
+      "count": 1,
+      "averageMs": 59,
+      "minMs": 59,
+      "maxMs": 59,
+      "p50Ms": 59,
+      "p95Ms": 59,
+      "thresholdMs": 50,
+      "perMinute": 0.07,
+      "entries": [
+        {
+          "durationMs": 59,
+          "recordedAtMs": 5.9,
+          "metadata": {
+            "source": "performance-observer",
+            "entryType": "longtask",
+            "name": "self"
+          }
+        }
+      ]
+    },
+    "chunkJobs": {
+      "count": 36000,
+      "averageMs": 0,
+      "minMs": 0,
+      "maxMs": 0.5,
+      "p50Ms": 0,
+      "p95Ms": 0,
+      "entries": []
+    }
+  },
+  "errors": [],
+  "failedResponses": []
+}

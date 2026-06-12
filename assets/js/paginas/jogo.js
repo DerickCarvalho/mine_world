@@ -95,12 +95,20 @@ async function bootstrapGame(root, overlay, crosshair, pauseMenu, chatOverlay) {
             worldMeta: gameContext.world,
             saveState: gameContext.saveState,
             radius: performanceProfile.turboEnabled ? 3 : 2,
-            batchSize: performanceProfile.turboEnabled ? 10 : 8,
+            batchSize: 4,
             onProgress: function (title, message) {
                 overlay.showLoading(title, message);
             }
         });
-        const prebuildResult = await prebuilder.ensureInitialChunkWindow();
+        let prebuildResult = {
+            cachedChunksCount: Number(gameContext.chunkStats && gameContext.chunkStats.cached_chunks_count || 0)
+        };
+
+        try {
+            prebuildResult = await prebuilder.ensureInitialChunkWindow();
+        } catch (error) {
+            console.warn('A preparacao inicial do mundo sera retomada durante o jogo.', error);
+        }
 
         destroyActiveGame();
 
@@ -126,6 +134,15 @@ async function bootstrapGame(root, overlay, crosshair, pauseMenu, chatOverlay) {
             pauseMenu: pauseMenu,
             chatOverlay: chatOverlay
         });
+        window.mineWorldBenchmark = {
+            snapshot: () => activeGameApp ? activeGameApp.getTelemetrySnapshot() : null,
+            exportJSON: () => activeGameApp ? activeGameApp.exportTelemetryJSON() : null,
+            reset: () => activeGameApp && activeGameApp.telemetry ? activeGameApp.telemetry.reset() : null,
+            integratedSmoke: () => activeGameApp ? activeGameApp.runIntegratedSmokeScenario() : null,
+            traverseChunks: (count, delayMs) => activeGameApp
+                ? activeGameApp.runChunkTraversalBenchmark(count, delayMs)
+                : null
+        };
 
         await activeGameApp.start();
     } catch (error) {

@@ -115,6 +115,12 @@ export class TerrainGenerator {
             biomeKey = 'lake';
         } else if (mountainWeight > 0.26 && ridgeWeight > 0.16) {
             biomeKey = 'mountains';
+        } else if (temperature < 0.34 && moisture > 0.52) {
+            biomeKey = 'taiga';
+        } else if (temperature > 0.54 && moisture > 0.42 && continental > 0.48) {
+            biomeKey = 'meadow';
+        } else if (temperature > 0.66 && moisture < 0.26 && continental > 0.46) {
+            biomeKey = 'badlands';
         } else if (temperature > 0.64 && moisture < 0.34) {
             biomeKey = 'desert';
         } else if (moisture > 0.55) {
@@ -204,6 +210,12 @@ export class TerrainGenerator {
 
         if (biome.key === 'desert') {
             rawHeight = 29 + biome.continental * 4.8 + continentalBase * 2.6 + rolling * 1.4 + dune * 2.8 + detail * 0.6;
+        } else if (biome.key === 'badlands') {
+            rawHeight = 32 + biome.continental * 7.1 + continentalBase * 2.3 + rolling * 1.8 + detail * 0.8 + dune * 1.6;
+        } else if (biome.key === 'meadow') {
+            rawHeight = 33 + biome.continental * 6.8 + continentalBase * 3.2 + rolling * 3.8 + detail * 1.6;
+        } else if (biome.key === 'taiga') {
+            rawHeight = 34 + biome.continental * 6.5 + continentalBase * 3.6 + rolling * 2.9 + detail * 1.5;
         } else if (biome.key === 'forest') {
             rawHeight = 31 + biome.continental * 6.4 + continentalBase * 3.4 + rolling * 3.2 + detail * 1.2;
         } else if (biome.key === 'mountains') {
@@ -212,9 +224,10 @@ export class TerrainGenerator {
                 + biome.continental * 7.5
                 + continentalBase * 2.6
                 + mountainMass * 5.2
-                + ridgeSoft * 2.4
+                + ridgeSoft * 3.6
                 + rangeLift
-                + rolling * 1.4;
+                + rolling * 2.2
+                + detail * 1.3;
         }
 
         if (biome.key === 'river') {
@@ -318,6 +331,51 @@ export class TerrainGenerator {
         return !this.isCaveAir(blockX, blockY, blockZ, surfaceHeight);
     }
 
+    getSubsurfaceBlockIdAt(x, y, z, surfaceHeight = null) {
+        const blockX = getBlockCoord(x);
+        const blockY = getBlockCoord(y);
+        const blockZ = getBlockCoord(z);
+        const topY = Number.isFinite(surfaceHeight) ? surfaceHeight : this.getSurfaceHeightAt(blockX, blockZ);
+
+        if (blockY <= 0) {
+            return BLOCK_TYPES.bedrock;
+        }
+
+        if (topY - blockY <= 3) {
+            return BLOCK_TYPES.stone;
+        }
+
+        const oreNoise = this.random.fractalNoise2D(blockX + blockY * 17, blockZ - blockY * 13, {
+            frequency: 0.081,
+            octaves: 2,
+            lacunarity: 2,
+            persistence: 0.52,
+            salt: 1187
+        });
+        const denseNoise = this.random.fractalNoise2D(blockX - blockY * 9, blockZ + blockY * 11, {
+            frequency: 0.052,
+            octaves: 2,
+            lacunarity: 2.04,
+            persistence: 0.55,
+            salt: 1453
+        });
+        const oreChance = oreNoise * 0.72 + denseNoise * 0.28;
+
+        if (blockY <= 24 && oreChance > 0.84) {
+            return BLOCK_TYPES.gold_ore;
+        }
+
+        if (blockY <= 42 && oreChance > 0.77) {
+            return BLOCK_TYPES.iron_ore;
+        }
+
+        if (blockY <= 58 && oreChance > 0.71) {
+            return BLOCK_TYPES.coal_ore;
+        }
+
+        return BLOCK_TYPES.stone;
+    }
+
     getBlockTypeAt(x, y, z) {
         const blockX = getBlockCoord(x);
         const blockY = getBlockCoord(y);
@@ -374,13 +432,13 @@ export class TerrainGenerator {
                     }
 
                     const biome = this.getBiomeAt(candidateX, candidateZ);
-                    if (biome.key === 'river' || biome.key === 'lake' || biome.key === 'mountains') {
+                    if (biome.key === 'river' || biome.key === 'lake' || biome.key === 'mountains' || biome.key === 'badlands') {
                         continue;
                     }
 
                     const slope = this.estimateSlopeAt(candidateX, candidateZ);
                     const height = this.getSurfaceHeightAt(candidateX, candidateZ);
-                    const penalty = Math.abs(height - (this.waterLevel + 5)) + (biome.key === 'plains' ? 0 : 1.25);
+                    const penalty = Math.abs(height - (this.waterLevel + 5)) + ((biome.key === 'plains' || biome.key === 'meadow') ? 0 : 1.25);
 
                     if (slope < bestCandidate.slope || (slope === bestCandidate.slope && penalty < bestCandidate.penalty)) {
                         bestCandidate = { x: candidateX, z: candidateZ, slope: slope, penalty: penalty, height: height };

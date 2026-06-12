@@ -205,6 +205,8 @@
             return;
         }
 
+        let createdWorld = null;
+
         try {
             const payload = await window.ApiRequest.post('mundos/cadastrar.php', data, {
                 loadingMessage: 'Criando novo mundo...'
@@ -214,34 +216,41 @@
                 throw new Error(payload && payload.message ? payload.message : 'Nao foi possivel criar o mundo.');
             }
 
-            state.selectedWorldId = payload.data.world.id;
+            createdWorld = payload.data.world;
+            state.selectedWorldId = createdWorld.id;
             elements.createForm.reset();
-            window.loading.show('Pre-gerando chunks iniciais...');
-
-            try {
-                const prebuilderModule = await import(new URL(window.ENV.DOMAIN + '/assets/js/game/services/WorldPrebuilder.js', window.location.origin).toString());
-                const repositoryModule = await import(new URL(window.ENV.DOMAIN + '/assets/js/game/services/WorldRepository.js', window.location.origin).toString());
-                const repository = new repositoryModule.WorldRepository();
-                const prebuilder = new prebuilderModule.WorldPrebuilder({
-                    repository: repository,
-                    worldMeta: payload.data.world,
-                    radius: 2,
-                    batchSize: 8,
-                    onProgress: function (_, message) {
-                        setGlobalLoadingMessage(message);
-                    }
-                });
-
-                await prebuilder.ensureInitialChunkWindow();
-            } finally {
-                window.loading.hide();
-            }
-
-            window.showSuccess('Mundo criado e pre-gerado com sucesso.');
-            await loadWorlds({ loadingMessage: 'Atualizando lista de mundos...' });
         } catch (error) {
             window.showError(error.message || 'Falha ao criar o mundo.');
+            return;
         }
+
+        window.loading.show('Pre-gerando chunks iniciais...');
+
+        try {
+            const prebuilderModule = await import(new URL(window.ENV.DOMAIN + '/assets/js/game/services/WorldPrebuilder.js', window.location.origin).toString());
+            const repositoryModule = await import(new URL(window.ENV.DOMAIN + '/assets/js/game/services/WorldRepository.js', window.location.origin).toString());
+            const repository = new repositoryModule.WorldRepository();
+            const prebuilder = new prebuilderModule.WorldPrebuilder({
+                repository: repository,
+                worldMeta: createdWorld,
+                radius: 2,
+                batchSize: 4,
+                onProgress: function (_, message) {
+                    setGlobalLoadingMessage(message);
+                }
+            });
+
+            await prebuilder.ensureInitialChunkWindow();
+            window.showSuccess('Mundo criado e pre-gerado com sucesso.');
+        } catch (error) {
+            window.showAlert(
+                'O mundo foi criado, mas a preparacao inicial nao terminou. Ela sera retomada quando voce abrir o mundo.'
+            );
+        } finally {
+            window.loading.hide();
+        }
+
+        await loadWorlds({ loadingMessage: 'Atualizando lista de mundos...' });
     }
 
     async function deleteSelectedWorld() {

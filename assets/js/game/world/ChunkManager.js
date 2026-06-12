@@ -1,5 +1,6 @@
 import { createChunkKey } from './ChunkStore.js';
 import { WORLD_CONFIG, getBlockCoord, getChunkCoord, getRuntimeRenderRadius } from './WorldConfig.js';
+import { createChunkMeshingSnapshot } from './ChunkMeshingSnapshot.js';
 
 function normalizeLocalCoord(value) {
     return ((value % WORLD_CONFIG.chunkSize) + WORLD_CONFIG.chunkSize) % WORLD_CONFIG.chunkSize;
@@ -10,6 +11,8 @@ export class ChunkManager {
         this.store = options.store;
         this.mesher = options.mesher;
         this.world = options.world;
+        this.workerClient = options.workerClient || null;
+        this.telemetry = options.telemetry || null;
         this.renderRadius = getRuntimeRenderRadius(options.renderDistance);
         this.retentionRadius = this.renderRadius;
         this.requestQueue = [];
@@ -20,8 +23,38 @@ export class ChunkManager {
         this.dirtyQueue = [];
         this.dirtyPending = new Set();
         this.pendingSave = new Map();
+        this.jobVersions = new Map();
+        this.completedJobs = [];
         this.lastPlayerChunkX = null;
         this.lastPlayerChunkZ = null;
+    }
+
+    getNextJobVersion(key) {
+        const version = (this.jobVersions.get(key) || 0) + 1;
+        this.jobVersions.set(key, version);
+        return version;
+    }
+
+    invalidateJob(key) {
+        this.getNextJobVersion(key);
+    }
+
+    handleWorkerResult(result) {
+        this.completedJobs.push(result);
+    }
+
+    handleWorkerError(error, context) {
+        if (context && context.key) {
+            this.generationPending.delete(context.key);
+            this.dirtyPending.delete(context.key);
+            const queue = context.mode === 'rebuild' ? this.dirtyQueue : this.generationQueue;
+            queue.push({
+                chunkX: context.chunkX,
+                chunkZ: context.chunkZ,
+                distanceSq: this.lastPlayerChunkX === null ? 0 : this.getDistanceSq(context.chunkX, context.chunkZ, this.lastPlayerChunkX, this.lastPlayerChunkZ)
+            });
+        }
+        console.warn('Job de chunk falhou; o pipeline sincrono sera usado quando o chunk for solicitado novamente.', error);
     }
 
     setRenderDistance(renderDistance) {
@@ -50,6 +83,7 @@ export class ChunkManager {
     sortByDistance(queue, originChunkX, originChunkZ) {
         return queue
             .map((item) => ({
+                ...item,
                 chunkX: item.chunkX,
                 chunkZ: item.chunkZ,
                 distanceSq: this.getDistanceSq(item.chunkX, item.chunkZ, originChunkX, originChunkZ)
@@ -98,6 +132,7 @@ export class ChunkManager {
                 this.store.delete(chunk.key);
                 this.world.unloadChunk(chunk.chunkX, chunk.chunkZ);
                 this.dirtyPending.delete(chunk.key);
+                this.invalidateJob(chunk.key);
             }
         }
 
@@ -201,14 +236,16 @@ export class ChunkManager {
     markChunkDirty(chunkX, chunkZ) {
         const key = createChunkKey(chunkX, chunkZ);
 
-        if (!this.store.has(key) || this.dirtyPending.has(key)) {
+        if (!this.store.has(key)) {
             return;
         }
 
+        const version = this.getNextJobVersion(key);
         this.dirtyPending.add(key);
         this.dirtyQueue.push({
             chunkX: chunkX,
             chunkZ: chunkZ,
+            version: version,
             distanceSq: this.lastPlayerChunkX === null ? 0 : this.getDistanceSq(chunkX, chunkZ, this.lastPlayerChunkX, this.lastPlayerChunkZ)
         });
     }
@@ -269,6 +306,72 @@ export class ChunkManager {
         return true;
     }
 
+    scheduleWorkerJob(item, mode) {
+        if (!this.workerClient || !this.workerClient.isAvailable()) {
+            return false;
+        }
+
+        try {
+            const key = createChunkKey(item.chunkX, item.chunkZ);
+            const version = item.version || this.getNextJobVersion(key);
+            const snapshot = createChunkMeshingSnapshot(this.world, item.chunkX, item.chunkZ);
+            if (mode === 'rebuild') {
+                this.queueChunkForSave(item.chunkX, item.chunkZ);
+            }
+
+            return this.workerClient.request({
+                key: key,
+                version: version,
+                mode: mode,
+                chunkX: item.chunkX,
+                chunkZ: item.chunkZ,
+                snapshot: snapshot
+            });
+        } catch (error) {
+            console.warn('Falha ao preparar snapshot do Worker; usando pipeline sincrono.', error);
+            return false;
+        }
+    }
+
+    applyCompletedJobs(maxCount) {
+        let processed = 0;
+        let generated = 0;
+        let rebuilt = 0;
+
+        while (processed < maxCount && this.completedJobs.length > 0) {
+            const result = this.completedJobs.shift();
+            if (!result || this.jobVersions.get(result.key) !== result.version) {
+                continue;
+            }
+
+            this.generationPending.delete(result.key);
+            this.dirtyPending.delete(result.key);
+            const outsideRetention = this.lastPlayerChunkX !== null
+                && (Math.abs(result.chunk.chunkX - this.lastPlayerChunkX) > this.retentionRadius
+                    || Math.abs(result.chunk.chunkZ - this.lastPlayerChunkZ) > this.retentionRadius);
+            if (!this.overlapsWorld(result.chunk.chunkX, result.chunk.chunkZ) || outsideRetention) {
+                continue;
+            }
+
+            if (result.chunkDataBuffer instanceof ArrayBuffer) {
+                this.world.hydrateChunkData(result.chunk.chunkX, result.chunk.chunkZ, new Uint8Array(result.chunkDataBuffer));
+            }
+            this.store.set(result.key, result.chunk);
+            this.queueChunkForSave(result.chunk.chunkX, result.chunk.chunkZ);
+            if (this.telemetry) {
+                this.telemetry.recordChunkJob('worker-' + result.mode, result.durationMs, { key: result.key });
+            }
+            if (result.mode === 'rebuild') {
+                rebuilt += 1;
+            } else {
+                generated += 1;
+            }
+            processed += 1;
+        }
+
+        return { processed: processed, generated: generated, rebuilt: rebuilt };
+    }
+
     generateChunk(item) {
         const key = createChunkKey(item.chunkX, item.chunkZ);
         this.generationPending.delete(key);
@@ -283,12 +386,17 @@ export class ChunkManager {
     }
 
     drainQueue(maxChunksPerFrame = 1) {
-        let processed = 0;
-        let generated = 0;
-        let rebuilt = 0;
+        const completed = this.applyCompletedJobs(maxChunksPerFrame);
+        let processed = completed.processed;
+        let generated = completed.generated;
+        let rebuilt = completed.rebuilt;
 
         while (processed < maxChunksPerFrame && this.dirtyQueue.length > 0) {
             const nextDirty = this.dirtyQueue.shift();
+            if (this.scheduleWorkerJob(nextDirty, 'rebuild')) {
+                processed += 1;
+                continue;
+            }
             if (this.rebuildDirtyChunk(nextDirty)) {
                 rebuilt += 1;
                 processed += 1;
@@ -297,6 +405,10 @@ export class ChunkManager {
 
         while (processed < maxChunksPerFrame && this.generationQueue.length > 0) {
             const nextItem = this.generationQueue.shift();
+            if (this.scheduleWorkerJob(nextItem, 'generate')) {
+                processed += 1;
+                continue;
+            }
             if (this.generateChunk(nextItem)) {
                 generated += 1;
                 processed += 1;
@@ -331,7 +443,11 @@ export class ChunkManager {
                 continue;
             }
 
-            this.pendingSave.set(createChunkKey(chunk.chunkX, chunk.chunkZ), {
+            const key = createChunkKey(chunk.chunkX, chunk.chunkZ);
+            if (this.pendingSave.has(key)) {
+                continue;
+            }
+            this.pendingSave.set(key, {
                 chunkX: chunk.chunkX,
                 chunkZ: chunk.chunkZ,
                 data: chunk.data
@@ -340,7 +456,8 @@ export class ChunkManager {
     }
 
     getPendingCount() {
-        return this.requestQueue.length + this.loadingPending.size + this.generationQueue.length + this.dirtyQueue.length;
+        const workerPending = this.workerClient ? this.workerClient.getPendingCount() : 0;
+        return this.requestQueue.length + this.loadingPending.size + this.generationQueue.length + this.dirtyQueue.length + workerPending + this.completedJobs.length;
     }
 
     getLoadedChunkCount() {

@@ -24,7 +24,8 @@
                 showLoading: true,
                 loadingMessage: 'Carregando...',
                 skipAuthRedirect: false,
-                useApiBase: true
+                useApiBase: true,
+                timeoutMs: null
             }, options || {});
 
             const method = settings.method.toUpperCase();
@@ -57,10 +58,13 @@
             fetchOptions.signal = controller.signal;
 
             let timeoutId = null;
-            if (window.ENV.API_TIMEOUT_MS) {
+            const configuredTimeout = settings.timeoutMs === null
+                ? Number(window.ENV.API_TIMEOUT_MS || 0)
+                : Number(settings.timeoutMs || 0);
+            if (Number.isFinite(configuredTimeout) && configuredTimeout > 0) {
                 timeoutId = window.setTimeout(function () {
                     controller.abort();
-                }, window.ENV.API_TIMEOUT_MS);
+                }, configuredTimeout);
             }
 
             if (settings.showLoading && window.loading) {

@@ -1,5 +1,5 @@
 const TAU = Math.PI * 2;
-const MAX_PITCH = 1.3;
+const MAX_PITCH = Math.PI * 0.495;
 
 function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));

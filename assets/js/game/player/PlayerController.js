@@ -21,6 +21,9 @@ export class PlayerController {
         this.yaw = 0;
         this.pitch = DEFAULT_PITCH;
         this.grounded = true;
+        this.inWater = false;
+        this.sprinting = false;
+        this.crouching = false;
         this.maxAirborneY = 0;
         this.flyEnabled = Boolean(options.flyEnabled);
         this.flying = this.flyEnabled && Boolean(options.flying);
@@ -145,10 +148,24 @@ export class PlayerController {
         const normalizedSideways = moveMagnitude > 0 ? sideways / moveMagnitude : 0;
         const forwardVector = getForwardVector(this.yaw);
         const rightVector = getRightVector(this.yaw);
-        const moveSpeed = this.flying ? WORLD_CONFIG.flightMoveSpeed : WORLD_CONFIG.baseMoveSpeed;
+        this.inWater = !this.flying && this.collision.isBodyInWater(this.position);
+        this.crouching = !this.flying && !this.inWater && this.input.crouch;
+        this.sprinting = !this.flying && !this.inWater && !this.crouching && this.input.sprint && forward > 0;
+
+        let moveSpeed = WORLD_CONFIG.baseMoveSpeed;
+        if (this.flying) {
+            moveSpeed = WORLD_CONFIG.flightMoveSpeed;
+        } else if (this.inWater) {
+            moveSpeed = WORLD_CONFIG.waterMoveSpeed;
+        } else if (this.crouching) {
+            moveSpeed *= WORLD_CONFIG.crouchMoveMultiplier;
+        } else if (this.sprinting) {
+            moveSpeed *= WORLD_CONFIG.sprintMoveMultiplier;
+        }
+
         const targetVelocityX = (forwardVector.x * normalizedForward + rightVector.x * normalizedSideways) * moveSpeed;
         const targetVelocityZ = (forwardVector.z * normalizedForward + rightVector.z * normalizedSideways) * moveSpeed;
-        const smoothing = Math.min(1, deltaTime * (this.flying ? 12 : 10));
+        const smoothing = Math.min(1, deltaTime * (this.flying ? 12 : (this.inWater ? 5 : 10)));
 
         this.velocity.x += (targetVelocityX - this.velocity.x) * smoothing;
         this.velocity.z += (targetVelocityZ - this.velocity.z) * smoothing;
@@ -158,6 +175,15 @@ export class PlayerController {
             const descend = this.input.descend ? 1 : 0;
             const targetVerticalVelocity = (ascend - descend) * WORLD_CONFIG.flightVerticalSpeed;
             this.velocityY += (targetVerticalVelocity - this.velocityY) * Math.min(1, deltaTime * 16);
+        } else if (this.inWater) {
+            const ascend = this.input.jump ? 1 : 0;
+            const descend = this.input.descend ? 1 : 0;
+            const idleSink = ascend === descend ? -WORLD_CONFIG.waterIdleSinkSpeed : 0;
+            const targetVerticalVelocity = (ascend - descend) * WORLD_CONFIG.waterVerticalSpeed + idleSink;
+
+            this.velocityY += (targetVerticalVelocity - this.velocityY) * Math.min(1, deltaTime * WORLD_CONFIG.waterGravity);
+            this.grounded = false;
+            this.maxAirborneY = this.position.y;
         } else {
             if (this.grounded && this.input.jump) {
                 this.velocityY = WORLD_CONFIG.jumpVelocity;
@@ -178,7 +204,10 @@ export class PlayerController {
         const horizontal = this.collision.resolveHorizontal(
             this.position,
             (this.velocity.x + this.knockbackVelocity.x) * deltaTime,
-            (this.velocity.z + this.knockbackVelocity.z) * deltaTime
+            (this.velocity.z + this.knockbackVelocity.z) * deltaTime,
+            {
+                protectEdges: this.crouching && this.grounded
+            }
         );
         this.position.x = horizontal.x;
         this.position.z = horizontal.z;
@@ -200,6 +229,14 @@ export class PlayerController {
         const vertical = this.collision.resolveVertical(this.position, this.position.y + this.velocityY * deltaTime);
         this.position.y = vertical.y;
         this.grounded = vertical.grounded;
+
+        if (this.inWater) {
+            if (vertical.hitCeiling || vertical.grounded) {
+                this.velocityY = 0;
+            }
+
+            return events;
+        }
 
         if (wasGrounded && !vertical.grounded) {
             this.maxAirborneY = previousY;
@@ -249,6 +286,9 @@ export class PlayerController {
         this.knockbackVelocity.x = 0;
         this.knockbackVelocity.z = 0;
         this.grounded = !this.flying && this.position.y <= supportHeight + 0.0001;
+        this.inWater = !this.flying && this.collision.isBodyInWater(this.position);
+        this.sprinting = false;
+        this.crouching = false;
         this.maxAirborneY = this.position.y;
     }
 
@@ -287,8 +327,11 @@ export class PlayerController {
             grounded: this.grounded,
             flying: this.flying,
             flyEnabled: this.flyEnabled,
+            sprinting: this.sprinting,
+            crouching: this.crouching,
+            inWater: this.inWater,
             movingVertically: Math.abs(this.velocityY) > 0.18,
-            descending: this.input.descend === true,
+            descending: this.flying || this.inWater ? this.input.descend === true : this.crouching,
             jumping: this.input.jump === true
         };
     }
@@ -297,7 +340,7 @@ export class PlayerController {
         return {
             position: {
                 x: this.position.x,
-                y: this.position.y + WORLD_CONFIG.playerHeight,
+                y: this.position.y + WORLD_CONFIG.playerHeight - (this.crouching ? WORLD_CONFIG.crouchCameraOffset : 0),
                 z: this.position.z
             },
             yaw: this.yaw,

@@ -1,11 +1,26 @@
 {
   "name": "mine-world-harness",
   "private": true,
+  "type": "module",
   "scripts": {
+    "setup:local": "powershell -ExecutionPolicy Bypass -File codex/scripts/setup-local.ps1",
     "harness": "node codex/harness.mjs",
     "test:harness": "node codex/harness.mjs validate && node codex/scripts/test-harness-cli.mjs",
     "test:syntax": "node codex/scripts/test-syntax.mjs",
     "test:smoke": "node codex/scripts/test-smoke.mjs",
-    "test": "npm run test:harness && npm run test:syntax && npm run test:smoke"
+    "test:world-prebuilder": "node codex/scripts/test-world-prebuilder.mjs",
+    "test:inventory": "node codex/scripts/test-inventory-operations.mjs",
+    "test:telemetry": "node codex/scripts/test-runtime-telemetry.mjs",
+    "test:gameplay": "node codex/scripts/test-player-movement.mjs && node codex/scripts/test-interaction-rules.mjs && node codex/scripts/test-interaction-controller.mjs && node codex/scripts/test-gameplay-hud-controller.mjs",
+    "test:worker": "node codex/scripts/test-chunk-meshing-snapshot.mjs && node codex/scripts/test-chunk-worker-pipeline.mjs && node codex/scripts/test-chunk-worker-client.mjs",
+    "test:compatibility": "node codex/scripts/test-save-compatibility.mjs",
+    "test:browser": "node codex/scripts/test-browser-gameplay.mjs",
+    "test:benchmark": "set MINEWORLD_BROWSER_SMOKE_MS=300000&& set MINEWORLD_STRICT_PERFORMANCE=1&& node codex/scripts/test-browser-gameplay.mjs",
+    "benchmark:visible": "set MINEWORLD_HEADLESS=0&& set MINEWORLD_BROWSER_SMOKE_MS=300000&& set MINEWORLD_STRICT_PERFORMANCE=1&& node codex/scripts/test-browser-gameplay.mjs",
+    "smoke:browser:15m": "set MINEWORLD_HEADLESS=0&& set MINEWORLD_BROWSER_SMOKE_MS=900000&& node codex/scripts/test-browser-gameplay.mjs",
+    "test": "npm run test:harness && npm run test:syntax && npm run test:inventory && npm run test:telemetry && npm run test:gameplay && npm run test:worker && npm run test:compatibility && npm run test:world-prebuilder && npm run test:smoke"
+  },
+  "devDependencies": {
+    "playwright": "^1.60.0"
   }
 }
