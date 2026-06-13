@@ -36,4 +36,8 @@ export class PigMob extends PassiveMob {
             }
         });
     }
+
+    getDrops() {
+        return [{ block_id: 'raw_pork', quantity: 1 + Math.floor(Math.random() * 3) }];
+    }
 }

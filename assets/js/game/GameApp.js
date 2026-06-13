@@ -209,6 +209,7 @@ export class GameApp {
         this.frameTimeAccumulator = 0;
         this.frameSampleCount = 0;
         this.healthFlashTime = 0;
+        this.gameTick = 1000;
         this.deathElapsed = 0;
         this.currentBlockTarget = null;
         this.currentEntityTarget = null;
@@ -1630,11 +1631,18 @@ export class GameApp {
         }
 
         events.forEach((event) => {
-            if (!event || event.type !== 'player_hit') {
+            if (!event) {
                 return;
             }
 
-            this.applyDamage(Number(event.damage || 1), event.cause || event.entityType || 'mob', event.source || null);
+            if (event.type === 'player_hit') {
+                this.applyDamage(Number(event.damage || 1), event.cause || event.entityType || 'mob', event.source || null);
+            } else if (event.type === 'creeper_explode') {
+                this.applyDamage(Number(event.damage || 6), 'creeper', event.position || null);
+                if (this.chatOverlay) {
+                    this.chatOverlay.pushMessage('system', 'Um creeper explodiu!');
+                }
+            }
         });
     }
 
@@ -1656,11 +1664,15 @@ export class GameApp {
 
         if (cause === 'queda') {
             this.overlay.setStatus('Voce sofreu dano de queda.');
-        } else if (cause === 'cat') {
-            this.overlay.setStatus('O gato acertou voce.');
-        } else if (cause === 'hostile' || cause === 'crawler') {
-            this.overlay.setStatus('Uma criatura hostil acertou voce.');
-        } else if (cause === 'pig' || cause === 'sheep') {
+        } else if (cause === 'zombie') {
+            this.overlay.setStatus('Um zombie acertou voce.');
+        } else if (cause === 'skeleton') {
+            this.overlay.setStatus('Um skeleton atirou em voce.');
+        } else if (cause === 'spider') {
+            this.overlay.setStatus('Uma aranha mordeu voce.');
+        } else if (cause === 'creeper') {
+            this.overlay.setStatus('Voce foi atingido pela explosao do creeper!');
+        } else if (cause === 'pig' || cause === 'sheep' || cause === 'cow' || cause === 'chicken') {
             this.overlay.setStatus('O mob revidou o ataque.');
         } else if (cause === 'fome') {
             this.overlay.setStatus('Voce esta sofrendo com a fome.');
@@ -2259,7 +2271,8 @@ export class GameApp {
                 this.updateHunger(deltaTime, movementState);
             }
 
-            this.handleMobEvents(this.mobManager.update(deltaTime, this.player.getFeetPosition()));
+            this.gameTick = (this.gameTick + deltaTime * 20) % 24000;
+            this.handleMobEvents(this.mobManager.update(deltaTime, this.player.getFeetPosition(), this.gameTick < 12000));
             this.updateWorldDropPickups(deltaTime);
             chunkWindowChanged = this.chunkManager.update(this.player.getFeetPosition(), false);
             chunkResult = this.telemetry.measureChunkJob(

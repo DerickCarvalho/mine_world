@@ -119,7 +119,7 @@ Quando houver necessidade de persistencia de conta, configuracoes e mundos, a ca
 | PRD-016 | Texturas Minecraft Classic — integracao completa | Implementada | PRD-015 | Integrar texturas PNG reais do MC Classic, remover menu de texturas, exibir braco do Steve quando slot vazio. |
 | PRD-017 | Worldgen v5 — biomas e estruturas naturais | Implementada | PRD-016 | Refazer geracao procedural com biomas distintos, minerios, arvores e estruturas naturais (pocos, ruinas, cavernas). |
 | PRD-018 | Crafting grid 3x3 completo | Implementada | PRD-016 | Implementar crafting com grid 3x3 posicional, receitas MC Classic e UI de mesa de trabalho. |
-| PRD-019 | Mobs Minecraft — hostis e passivos | Rascunho | PRD-016 | Substituir mobs customizados por creeper, zombie, skeleton, spider, pig, cow, sheep e chicken com IA e drops corretos. |
+| PRD-019 | Mobs Minecraft — hostis e passivos | Implementada | PRD-016 | Substituir mobs customizados por creeper, zombie, skeleton, spider, pig, cow, sheep e chicken com IA e drops corretos. |
 | PRD-020 | Sprint toggle e fome realista | Rascunho | PRD-016 | Adicionar sprint com toggle Ctrl/duplo-W, fome 3x mais rapida no sprint e custo de pulo. |
 | PRD-021 | Blocos interativos — crafting table, furnace, chest | Rascunho | PRD-016 | Implementar crafting table 3x3, fornalha com combustivel e progresso, e bau com 27 slots de armazenamento. |
 

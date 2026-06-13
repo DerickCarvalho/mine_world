@@ -36,4 +36,8 @@ export class SheepMob extends PassiveMob {
             }
         });
     }
+
+    getDrops() {
+        return [{ block_id: 'cloth', quantity: 1 + Math.floor(Math.random() * 3) }];
+    }
 }

@@ -25,6 +25,8 @@ export const ITEM_TEXTURE_MAP = Object.freeze({
     diamond_axe:     I + 'diamond_axe.png',
     diamond_sword:   I + 'diamond_sword.png',
     raw_pork:        I + 'porkchop.png',
+    raw_beef:        I + 'beef_raw.png',
+    raw_chicken:     I + 'chicken_raw.png',
     cooked_pork:     I + 'cooked_porkchop.png',
     coal:            I + 'coal.png',
     iron_ingot:      I + 'iron_ingot.png',

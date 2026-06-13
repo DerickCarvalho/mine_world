@@ -154,6 +154,23 @@ export const SHAPED_RECIPES = Object.freeze([
         id: 'bread', type: 'shaped', width: 3, height: 1,
         pattern: [['wheat', 'wheat', 'wheat']],
         output: { block_id: 'bread', quantity: 1 }
+    },
+    // Block compression
+    {
+        id: 'gold_bricks', type: 'shaped', width: 2, height: 2,
+        pattern: [['gold_ingot', 'gold_ingot'], ['gold_ingot', 'gold_ingot']],
+        output: { block_id: 'gold_bricks', quantity: 4 }
+    },
+    // Smelting shortcuts (crafting proxy until furnace is interactive)
+    {
+        id: 'cobble_from_stone', type: 'shapeless',
+        inputs: [{ block_id: 'stone', quantity: 1 }],
+        output: { block_id: 'cobblestone', quantity: 1 }
+    },
+    {
+        id: 'glass_from_sand_and_coal', type: 'shapeless',
+        inputs: [{ block_id: 'sand', quantity: 1 }, { block_id: 'coal_ore', quantity: 1 }],
+        output: { block_id: 'glass', quantity: 1 }
     }
 ]);
 

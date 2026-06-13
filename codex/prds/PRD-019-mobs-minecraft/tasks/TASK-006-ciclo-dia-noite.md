@@ -1,4 +1,4 @@
-﻿# TASK-6: Ciclo dia/noite no GameApp.js
+# TASK-6: Ciclo dia/noite no GameApp.js
 
 ## Metadados
 
@@ -7,14 +7,14 @@
 | **PRD** | [PRD-019-mobs-minecraft.md](../PRD-019-mobs-minecraft.md) |
 | **PRD Tecnica** | [PRD-TECNICA-019-mobs-minecraft.md](../PRD-TECNICA-019-mobs-minecraft.md) |
 | **Harness Version** | 2 |
-| **Status** | Pendente |
+| **Status** | Concluida |
 | **Depende de** | TASK-005 |
 | **Bloqueia** | TASK-007 |
 | **Criterios cobertos** | CA-02, CA-07 |
 
 ## Checklist de Validacao
 
-- [ ] Implementacao realizada no modulo correto
-- [ ] Fluxo principal testado
-- [ ] Regressao manual basica verificada
-- [ ] Documentacao atualizada se necessario
+- [x] Implementacao realizada no modulo correto
+- [x] Fluxo principal testado
+- [x] Regressao manual basica verificada
+- [x] Documentacao atualizada se necessario

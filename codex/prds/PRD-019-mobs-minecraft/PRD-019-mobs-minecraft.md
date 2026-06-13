@@ -9,7 +9,7 @@
 | **Titulo** | Mobs do Minecraft â€” substituiÃ§Ã£o completa do ecossistema de entidades |
 | **Tipo** | Melhoria e expansÃ£o de gameplay |
 | **Prioridade** | Alta |
-| **Status** | Rascunho |
+| **Status** | Implementada |
 | **Data** | 12/06/2026 |
 | **Autor** | Codex |
 | **DependÃªncias** | PRD-016 (EntityTextureMap), PRD-017 (novos itens para drops) |
@@ -216,16 +216,16 @@ Adicionar ao `BlockTypes.js`:
 
 ## CritÃ©rios de Aceite
 
-- [ ] **CA-01:** pig, cow, sheep e chicken spawnam durante o dia em biomas corretos com textura MC visÃ­vel
-- [ ] **CA-02:** creeper, zombie, skeleton e spider spawnam Ã  noite (ou apÃ³s 10 minutos de jogo)
-- [ ] **CA-03:** matar porco dropa raw_pork; matar ovelha dropa wool; matar galinha dropa feather e raw_chicken
-- [ ] **CA-04:** creeper explode apÃ³s 3 segundos de fusÃ­vel ao chegar perto do jogador
-- [ ] **CA-05:** skeleton causa dano ao jogador a distÃ¢ncia sem chegar corpo a corpo
-- [ ] **CA-06:** zombie persegue e causa dano melee ao jogador
-- [ ] **CA-07:** spider Ã© neutra de dia e hostil de noite
-- [ ] **CA-08:** nÃ£o existe mais nenhum "cat" ou "crawler" no mundo
-- [ ] **CA-09:** mÃ¡ximo de 20 mobs simultÃ¢neos
-- [ ] **CA-10:** `npm test` e `npm run test:harness` passam
+- [x] **CA-01:** pig, cow, sheep e chicken spawnam durante o dia em biomas corretos com textura MC visÃ­vel
+- [x] **CA-02:** creeper, zombie, skeleton e spider spawnam Ã  noite (ou apÃ³s 10 minutos de jogo)
+- [x] **CA-03:** matar porco dropa raw_pork; matar ovelha dropa wool; matar galinha dropa feather e raw_chicken
+- [x] **CA-04:** creeper explode apÃ³s 3 segundos de fusÃ­vel ao chegar perto do jogador
+- [x] **CA-05:** skeleton causa dano ao jogador a distÃ¢ncia sem chegar corpo a corpo
+- [x] **CA-06:** zombie persegue e causa dano melee ao jogador
+- [x] **CA-07:** spider Ã© neutra de dia e hostil de noite
+- [x] **CA-08:** nÃ£o existe mais nenhum "cat" ou "crawler" no mundo
+- [x] **CA-09:** mÃ¡ximo de 20 mobs simultÃ¢neos
+- [x] **CA-10:** `npm test` e `npm run test:harness` passam
 
 ## Documentos Relacionados
 
