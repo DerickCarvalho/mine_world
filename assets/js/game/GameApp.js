@@ -13,7 +13,8 @@ import { Hotbar } from './ui/Hotbar.js';
 import { InventoryPanel } from './ui/InventoryPanel.js';
 import { GameplayHudController } from './ui/GameplayHudController.js';
 import { applyInventoryClick, INVENTORY_CLICK } from './inventory/InventoryOperations.js';
-import { craftRecipe, getRecipeById, listRecipeStates } from './inventory/CraftingCatalog.js';
+import { craftRecipe, getRecipeById, listRecipeStates, getRecipeForGrid, consumeGridIngredients, addOutputToInventory, returnGridToInventory } from './inventory/CraftingCatalog.js';
+import { CraftingTableUI } from './ui/CraftingTableUI.js';
 import { FirstPersonHand } from './ui/FirstPersonHand.js';
 import { MobManager } from './entities/MobManager.js';
 import { EntityPicker } from './entities/EntityPicker.js';
@@ -22,6 +23,7 @@ import { RuntimeTelemetry } from './telemetry/RuntimeTelemetry.js';
 import { ChunkWorkerClient } from './workers/ChunkWorkerClient.js';
 import { InteractionController } from './interaction/InteractionController.js';
 import { isCreativeMode, normalizeGameMode } from './core/GameModeRules.js';
+import { ENTITY_TEXTURE_MAP } from './entities/EntityTextureMap.js';
 
 const SESSION_STATES = Object.freeze({
     BOOTING: 'booting',
@@ -212,9 +214,12 @@ export class GameApp {
         this.currentEntityTarget = null;
         this.primaryActionHeld = false;
         this.inventoryOpen = false;
+        this.craftTableOpen = false;
         this.chatOpen = false;
         this.inventorySelectedSlotIndex = null;
         this.inventoryCursorStack = null;
+        this.craftGrid2x2 = [null, null, null, null];
+        this.craftGrid3x3 = new Array(9).fill(null);
         this.coordsVisible = false;
         this.chunkLoadInFlight = null;
         this.chunkSaveInFlight = null;
@@ -242,6 +247,7 @@ export class GameApp {
 
         this.hotbar = new Hotbar(this.root.querySelector('[data-game-hotbar]'));
         this.inventoryPanel = new InventoryPanel(this.root.querySelector('[data-game-inventory]'));
+        this.craftingTableUI = new CraftingTableUI(this.root.querySelector('[data-crafting-table]'));
         this.hand = new FirstPersonHand(this.root.querySelector('[data-game-hand]'));
         this.audio = new GameAudio(this.userConfig.master_volume);
         this.healthBar = this.root.querySelector('[data-game-health]');
@@ -293,6 +299,11 @@ export class GameApp {
         this.telemetry.observeLongTasks();
         this.renderer.setPerformanceProfile(this.performanceProfile);
         await this.renderer.setTextureCatalog(this.textureManifest);
+        const entityTextureCatalog = {};
+        Object.entries(ENTITY_TEXTURE_MAP).forEach(function (entry) {
+            entityTextureCatalog['entity_' + entry[0]] = { top: { path: entry[1] }, side: { path: entry[1] }, bottom: { path: entry[1] } };
+        });
+        await this.renderer.setTextureCatalog(entityTextureCatalog);
         this.terrain = new TerrainGenerator(this.worldMeta.seed, this.worldMeta.algorithm_version);
         this.world = new MutableWorld(this.terrain);
         this.world.applySerializedMutations(this.initialSaveState && this.initialSaveState.world ? this.initialSaveState.world.block_mutations : []);
@@ -397,13 +408,29 @@ export class GameApp {
             this.inventoryPanel.onSlotClick = (index, click) => {
                 this.handleInventorySlotClick(index, click);
             };
-            this.inventoryPanel.onRecipeCraft = (recipeId) => {
-                this.attemptCraftRecipe(recipeId);
+            this.inventoryPanel.onCraftGridSlotClick = (index, click) => {
+                this.handleCraftGrid2x2SlotClick(index, click);
+            };
+            this.inventoryPanel.onCraftOutputClick = (click) => {
+                this.handleCraftOutput2x2Click(click);
             };
             this.inventoryPanel.onCreativePick = (blockKey) => {
                 this.fillSelectedSlotFromCreative(blockKey);
             };
             this.inventoryPanel.hide();
+        }
+
+        if (this.craftingTableUI) {
+            this.craftingTableUI.onGridSlotClick = (index, click) => {
+                this.handleCraftGrid3x3SlotClick(index, click);
+            };
+            this.craftingTableUI.onOutputClick = (click) => {
+                this.handleCraftOutput3x3Click(click);
+            };
+            this.craftingTableUI.onClose = () => {
+                this.closeCraftingTable();
+            };
+            this.craftingTableUI.hide();
         }
 
         if (this.chatOverlay) {
@@ -616,20 +643,40 @@ export class GameApp {
         return this.availableCommands;
     }
 
+    getCraftOutput2x2() {
+        const recipe = getRecipeForGrid(this.craftGrid2x2, 2);
+        if (!recipe) return null;
+        return { block_id: recipe.output.block_id, quantity: recipe.output.quantity };
+    }
+
+    getCraftOutput3x3() {
+        const recipe = getRecipeForGrid(this.craftGrid3x3, 3);
+        if (!recipe) return null;
+        return { block_id: recipe.output.block_id, quantity: recipe.output.quantity };
+    }
+
     renderUi() {
+        const craftOutputSlot = this.getCraftOutput2x2();
         this.hud.render({
             inventorySlots: this.inventorySlots,
             selectedHotbarIndex: this.selectedHotbarIndex,
             inventorySelectedSlotIndex: this.inventorySelectedSlotIndex,
             inventoryCursorStack: this.inventoryCursorStack,
             gameMode: this.gameMode,
-            recipes: listRecipeStates(this.inventorySlots),
+            craftGridSlots: this.craftGrid2x2,
+            craftOutputSlot: craftOutputSlot,
             creativePalette: this.creativePalette,
             health: this.health,
             hunger: this.hunger,
             healthFlashTime: this.healthFlashTime,
             player: this.player
         });
+
+        if (this.craftTableOpen && this.craftingTableUI) {
+            const output3x3 = this.getCraftOutput3x3();
+            this.craftingTableUI.render(this.craftGrid3x3, output3x3, this.inventorySlots);
+        }
+
         this.uiDirty = false;
     }
     updatePauseMenuData() {
@@ -743,11 +790,19 @@ export class GameApp {
             return;
         }
 
+        if (this.craftTableOpen) {
+            this.closeCraftingTable();
+            return;
+        }
+
         if (this.inventoryOpen) {
             if (!this.returnInventoryCursor()) {
                 this.overlay.setStatus('Libere um slot para guardar o item que esta na mao.');
                 return;
             }
+            // Return 2x2 craft grid items to inventory on close
+            this.inventorySlots = returnGridToInventory(this.inventorySlots, this.craftGrid2x2);
+            this.craftGrid2x2 = [null, null, null, null];
             this.inventoryOpen = false;
             this.inventorySelectedSlotIndex = null;
             this.inventoryPanel.hide();
@@ -964,6 +1019,107 @@ export class GameApp {
         this.inventorySlots = result.slots;
         this.inventoryCursorStack = result.cursorStack;
         this.inventorySelectedSlotIndex = this.inventoryCursorStack ? index : null;
+        this.uiDirty = true;
+    }
+
+    handleCraftGrid2x2SlotClick(index, click) {
+        const result = this._applyCraftGridClick(this.craftGrid2x2, index, click);
+        this.craftGrid2x2 = result;
+        this.uiDirty = true;
+    }
+
+    handleCraftOutput2x2Click(click) {
+        const recipe = getRecipeForGrid(this.craftGrid2x2, 2);
+        if (!recipe) return;
+        if (click === 'primary') {
+            this._consumeCraftOnce(recipe, 'craftGrid2x2');
+        }
+    }
+
+    handleCraftGrid3x3SlotClick(index, click) {
+        const result = this._applyCraftGridClick(this.craftGrid3x3, index, click);
+        this.craftGrid3x3 = result;
+        this.uiDirty = true;
+    }
+
+    handleCraftOutput3x3Click(click) {
+        const recipe = getRecipeForGrid(this.craftGrid3x3, 3);
+        if (!recipe) return;
+        if (click === 'primary') {
+            this._consumeCraftOnce(recipe, 'craftGrid3x3');
+        }
+    }
+
+    _applyCraftGridClick(gridSlots, index, click) {
+        const newGrid = gridSlots.slice();
+        const cursor = this.inventoryCursorStack;
+        const existing = newGrid[index];
+
+        if (click === 'primary') {
+            if (cursor) {
+                if (existing && existing.block_id === cursor.block_id && existing.quantity < 64) {
+                    newGrid[index] = { block_id: cursor.block_id, quantity: Math.min(64, existing.quantity + cursor.quantity) };
+                    this.inventoryCursorStack = null;
+                } else if (!existing) {
+                    newGrid[index] = { block_id: cursor.block_id, quantity: cursor.quantity };
+                    this.inventoryCursorStack = null;
+                } else {
+                    newGrid[index] = cursor;
+                    this.inventoryCursorStack = existing;
+                }
+            } else if (existing) {
+                this.inventoryCursorStack = existing;
+                newGrid[index] = null;
+            }
+        } else if (click === 'secondary') {
+            if (cursor && !existing) {
+                newGrid[index] = { block_id: cursor.block_id, quantity: 1 };
+                const newQty = cursor.quantity - 1;
+                this.inventoryCursorStack = newQty > 0 ? { block_id: cursor.block_id, quantity: newQty } : null;
+            } else if (!cursor && existing) {
+                const take = Math.ceil(existing.quantity / 2);
+                this.inventoryCursorStack = { block_id: existing.block_id, quantity: take };
+                const left = existing.quantity - take;
+                newGrid[index] = left > 0 ? { block_id: existing.block_id, quantity: left } : null;
+            }
+        }
+        return newGrid;
+    }
+
+    _consumeCraftOnce(recipe, gridKey) {
+        const newGrid = consumeGridIngredients(this[gridKey]);
+        const { slots: newInv } = addOutputToInventory(this.inventorySlots, recipe);
+        this[gridKey] = newGrid;
+        this.inventorySlots = newInv;
+        this.uiDirty = true;
+        this.overlay.setStatus('Craftado: ' + (recipe.output.block_id || ''));
+    }
+
+    openCraftingTable() {
+        if (this.craftTableOpen) return;
+        this.craftTableOpen = true;
+        this.inventoryOpen = true;
+        this.player.setGameplayEnabled(false);
+        this.player.resetTransientInput();
+        this.player.releasePointerLock();
+        this.craftingTableUI.show();
+        this.crosshair.hide();
+        this.overlay.setStatus('Bancada aberta. Use E para fechar.');
+        this.currentBlockTarget = null;
+        this.uiDirty = true;
+    }
+
+    closeCraftingTable() {
+        if (!this.craftTableOpen) return;
+        // Return grid items to inventory
+        this.inventorySlots = returnGridToInventory(this.inventorySlots, this.craftGrid3x3);
+        this.craftGrid3x3 = new Array(9).fill(null);
+        this.craftTableOpen = false;
+        this.inventoryOpen = false;
+        this.craftingTableUI.hide();
+        this.player.setGameplayEnabled(true);
+        this.overlay.showInstruction(POINTER_LOCK_HINT);
+        this.overlay.setStatus('Bancada fechada.');
         this.uiDirty = true;
     }
 
@@ -1847,9 +2003,14 @@ export class GameApp {
             if (this.currentEntityTarget) {
                 this.toggleEntityFollow();
             } else {
-                const consumed = this.consumeSelectedFood();
-                if (!consumed) {
-                    this.placeSelectedBlock();
+                // Right-click on workbench → open crafting table
+                if (this.currentBlockTarget && this.currentBlockTarget.blockId === BLOCK_TYPES.workbench) {
+                    this.openCraftingTable();
+                } else {
+                    const consumed = this.consumeSelectedFood();
+                    if (!consumed) {
+                        this.placeSelectedBlock();
+                    }
                 }
             }
         }

@@ -71,10 +71,14 @@ $requestedWorldId = (int) (filter_input(INPUT_GET, 'id_mundo', FILTER_VALIDATE_I
                 <aside class="game-inventory__side">
                     <section class="game-inventory__section">
                         <div class="game-inventory__section-header">
-                            <h3>Crafts</h3>
-                            <span data-inventory-craft-mode>Survival</span>
+                            <h3>Crafting rapido</h3>
+                            <span data-inventory-craft-mode>2x2</span>
                         </div>
-                        <div class="game-inventory__recipes" data-inventory-recipes></div>
+                        <div class="game-craft-quick" data-craft-quick>
+                            <div class="game-craft-quick__grid" data-craft-grid-2x2></div>
+                            <div class="game-craft-quick__arrow">&#8594;</div>
+                            <div class="game-craft-quick__output" data-craft-output-2x2></div>
+                        </div>
                     </section>
 
                     <section class="game-inventory__section" data-creative-panel hidden>
@@ -90,6 +94,25 @@ $requestedWorldId = (int) (filter_input(INPUT_GET, 'id_mundo', FILTER_VALIDATE_I
             <div class="game-inventory__hint">
                 <span>E</span>
                 <p>Fechar inventario</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="game-crafting-table" data-crafting-table hidden>
+        <div class="game-crafting-table__card">
+            <div class="game-crafting-table__header">
+                <p class="game-crafting-table__eyebrow">MineWorld</p>
+                <h2>Bancada de trabalho</h2>
+            </div>
+            <div class="game-crafting-table__main">
+                <div class="game-crafting-table__grid" data-craft-grid-3x3></div>
+                <div class="game-crafting-table__arrow">&#8594;</div>
+                <div class="game-crafting-table__output" data-craft-output-3x3></div>
+            </div>
+            <div class="game-crafting-table__inventory" data-craft-table-inventory></div>
+            <div class="game-crafting-table__hint">
+                <span>E</span>
+                <p>Fechar bancada (itens devolvidos ao inventario)</p>
             </div>
         </div>
     </div>

@@ -1,8 +1,8 @@
 import { GameApp } from '../game/GameApp.js';
 import { WorldRepository } from '../game/services/WorldRepository.js';
 import { WorldPrebuilder } from '../game/services/WorldPrebuilder.js';
-import { TextureRepository } from '../game/services/TextureRepository.js';
 import { CommandRepository } from '../game/services/CommandRepository.js';
+import { BLOCK_TEXTURE_CATALOG } from '../game/world/BlockTextureMap.js';
 import { SceneOverlay } from '../game/ui/SceneOverlay.js';
 import { Crosshair } from '../game/ui/Crosshair.js';
 import { PauseMenu } from '../game/ui/PauseMenu.js';
@@ -74,17 +74,13 @@ async function bootstrapGame(root, overlay, crosshair, pauseMenu, chatOverlay) {
     }
 
     const repository = new WorldRepository();
-    const textureRepository = new TextureRepository();
     const commandRepository = new CommandRepository();
     const performanceProfile = resolvePerformanceProfile();
-    overlay.showLoading('Carregando mundo', 'Buscando metadados, configuracoes, comandos e texturas do runtime.');
+    overlay.showLoading('Carregando mundo', 'Buscando metadados, configuracoes e comandos do runtime.');
 
     try {
-        const [gameContext, textureManifest, initialCommands] = await Promise.all([
+        const [gameContext, initialCommands] = await Promise.all([
             repository.loadGameContext(worldId),
-            textureRepository.loadManifest().catch(function () {
-                return {};
-            }),
             commandRepository.listValidated().catch(function () {
                 return [];
             })
@@ -125,7 +121,7 @@ async function bootstrapGame(root, overlay, crosshair, pauseMenu, chatOverlay) {
                 )
             },
             repository: repository,
-            textureManifest: textureManifest,
+            textureManifest: BLOCK_TEXTURE_CATALOG,
             initialCommands: initialCommands,
             commandRepository: commandRepository,
             performanceProfile: performanceProfile,

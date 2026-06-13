@@ -1,4 +1,4 @@
-# PRD-015: Survival classico, combate e UX voxel madura
+﻿# PRD-015: Survival classico, combate e UX voxel madura
 
 ## Resumo Executivo
 
@@ -9,7 +9,7 @@
 | **Titulo** | Survival classico, combate e UX voxel madura |
 | **Tipo** | Melhoria e expansao de gameplay |
 | **Prioridade** | Alta |
-| **Status** | Concluida |
+| **Status** | Implementada |
 | **Data** | 12/06/2026 |
 | **Autor** | Codex |
 | **Dependencias** | PRD-013 e PRD-014 |
@@ -47,7 +47,7 @@ O MineWorld ja saiu do zero, mas a experiencia ainda parece fragmentada: parte d
 
 ## Objetivo da Funcionalidade
 
-Entregar a primeira versao realmente coesa do MineWorld como survival voxel classico: camera confiavel, outline correto no bloco mirado, inventario/hotbar limpos, crafting util, mundo procedural mais natural, fome funcional, mao vazia convincente, mobs combatíveis e drops coletaveis. A meta nao e copiar assets, marcas ou arquivos do Minecraft, e sim aproximar a experiencia mecanica e visual dentro da arquitetura ja existente do projeto.
+Entregar a primeira versao realmente coesa do MineWorld como survival voxel classico: camera confiavel, outline correto no bloco mirado, inventario/hotbar limpos, crafting util, mundo procedural mais natural, fome funcional, mao vazia convincente, mobs combatÃ­veis e drops coletaveis. A meta nao e copiar assets, marcas ou arquivos do Minecraft, e sim aproximar a experiencia mecanica e visual dentro da arquitetura ja existente do projeto.
 
 Esta PRD existe para separar elevacao de qualidade e paridade survival da expansao inicial de conteudo da PRD-014. A PRD-014 introduz base de modos, blocos, estruturas e crafting. A PRD-015 fecha o que ainda esta faltando para essa base parecer produto e nao apenas prototipo enriquecido.
 
@@ -243,20 +243,20 @@ Esta PRD existe para separar elevacao de qualidade e paridade survival da expans
 
 ## Criterios de Aceite
 
-- [ ] **CA-01:** Existe uma auditoria inicial documentada dos modulos de renderizacao, worldgen, inventario, hotbar, crafting, player, camera, mobs, HUD, combate e drops.
-- [ ] **CA-02:** O jogador consegue olhar diretamente para o ceu e para os proprios pes/chao, sem inversao quebrada nem raycast desalinhado.
-- [ ] **CA-03:** O destaque de bloco passa a ser apenas um outline fino no bloco mirado e o cubo fantasma deixa de existir.
-- [ ] **CA-04:** O mundo apresenta pelo menos planicie, floresta, deserto e montanhas/colinas com leitura visual distinta.
-- [ ] **CA-05:** A densidade de arvores passa a respeitar o bioma e a floresta parece floresta.
-- [ ] **CA-06:** Hotbar e inventario exibem itens/blocos corretamente, com slot ativo claro e stacks legiveis.
-- [ ] **CA-07:** O jogador consegue executar crafts uteis sem duplicacao ou consumo incorreto de recurso.
-- [ ] **CA-08:** A HUD passa a exibir fome e a fome muda durante a sessao de jogo.
-- [ ] **CA-09:** Slot vazio mostra mao vazia; slot com item mostra item/bloco coerente na mao.
-- [ ] **CA-10:** Existe ao menos um mob passivo e um hostil com HP, dano, morte e remocao corretos.
-- [ ] **CA-11:** Matar um mob gera drop coletavel que entra corretamente no inventario.
-- [ ] **CA-12:** O combate do jogador respeita alcance curto, cooldown simples e dano diferente para mao vazia vs arma/ferramenta, quando houver.
-- [ ] **CA-13:** A sessao continua performando bem, sem regressao evidente de streaming, render ou loops por frame.
-- [ ] **CA-14:** `npm test`, `npm run test:harness` e validacoes sintaticas aplicaveis passam na entrega executada.
+- [x] **CA-01:** Existe uma auditoria inicial documentada dos modulos de renderizacao, worldgen, inventario, hotbar, crafting, player, camera, mobs, HUD, combate e drops.
+- [x] **CA-02:** O jogador consegue olhar diretamente para o ceu e para os proprios pes/chao, sem inversao quebrada nem raycast desalinhado.
+- [x] **CA-03:** O destaque de bloco passa a ser apenas um outline fino no bloco mirado e o cubo fantasma deixa de existir.
+- [x] **CA-04:** O mundo apresenta pelo menos planicie, floresta, deserto e montanhas/colinas com leitura visual distinta.
+- [x] **CA-05:** A densidade de arvores passa a respeitar o bioma e a floresta parece floresta.
+- [x] **CA-06:** Hotbar e inventario exibem itens/blocos corretamente, com slot ativo claro e stacks legiveis.
+- [x] **CA-07:** O jogador consegue executar crafts uteis sem duplicacao ou consumo incorreto de recurso.
+- [x] **CA-08:** A HUD passa a exibir fome e a fome muda durante a sessao de jogo.
+- [x] **CA-09:** Slot vazio mostra mao vazia; slot com item mostra item/bloco coerente na mao.
+- [x] **CA-10:** Existe ao menos um mob passivo e um hostil com HP, dano, morte e remocao corretos.
+- [x] **CA-11:** Matar um mob gera drop coletavel que entra corretamente no inventario.
+- [x] **CA-12:** O combate do jogador respeita alcance curto, cooldown simples e dano diferente para mao vazia vs arma/ferramenta, quando houver.
+- [x] **CA-13:** A sessao continua performando bem, sem regressao evidente de streaming, render ou loops por frame.
+- [x] **CA-14:** `npm test`, `npm run test:harness` e validacoes sintaticas aplicaveis passam na entrega executada.
 
 ## Historico de Requisitos
 
@@ -280,3 +280,5 @@ Esta PRD existe para separar elevacao de qualidade e paridade survival da expans
 | PRD tecnica | [PRD-TECNICA-015-survival-classico-combate-fome-outline.md](./PRD-TECNICA-015-survival-classico-combate-fome-outline.md) |
 | Tasks | [tasks/](./tasks/) |
 | Validacao final | [PRD-015-validacao.md](../../execucoes/PRD-015-validacao.md) |
+
+

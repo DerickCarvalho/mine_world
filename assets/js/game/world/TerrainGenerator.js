@@ -3,9 +3,9 @@ import { SeededRandom } from './SeededRandom.js';
 import { WORLD_CONFIG, clampNumber, getBlockCoord, isWithinWorldBounds } from './WorldConfig.js';
 
 export class TerrainGenerator {
-    constructor(seed, algorithmVersion = 'v4.0') {
+    constructor(seed, algorithmVersion = 'v5.0') {
         this.seed = String(seed || 'mineworld');
-        this.algorithmVersion = String(algorithmVersion || 'v4.0');
+        this.algorithmVersion = String(algorithmVersion || 'v5.0');
         this.random = new SeededRandom(this.seed + '|' + this.algorithmVersion);
         this.heightCache = new Map();
         this.biomeCache = new Map();
@@ -239,6 +239,25 @@ export class TerrainGenerator {
             rawHeight = Math.min(rawHeight, this.waterLevel - 0.4 + detail * 0.25);
         }
 
+        // Blend suave com alturas ja calculadas de biomas vizinhos para evitar gaps abruptos
+        const blendRadius = 12;
+        const blendOffsets = [[-blendRadius, 0], [blendRadius, 0], [0, -blendRadius], [0, blendRadius]];
+        let blendH = rawHeight;
+        let blendTotal = 1.0;
+        for (let bi = 0; bi < blendOffsets.length; bi++) {
+            const nx = x + blendOffsets[bi][0];
+            const nz = z + blendOffsets[bi][1];
+            const nk = this.getCacheKey(nx, nz);
+            if (this.heightCache.has(nk)) {
+                const nBiome = this.getBiomeAt(nx, nz);
+                if (nBiome.key !== biome.key) {
+                    blendH += this.heightCache.get(nk) * 0.2;
+                    blendTotal += 0.2;
+                }
+            }
+        }
+        rawHeight = blendH / blendTotal;
+
         const edgeDistanceX = Math.min(x - WORLD_CONFIG.minX, WORLD_CONFIG.maxX - x);
         const edgeDistanceZ = Math.min(z - WORLD_CONFIG.minZ, WORLD_CONFIG.maxZ - z);
         const edgeFactor = clampNumber(Math.min(edgeDistanceX, edgeDistanceZ) / 88, 0, 1);
@@ -361,17 +380,11 @@ export class TerrainGenerator {
         });
         const oreChance = oreNoise * 0.72 + denseNoise * 0.28;
 
-        if (blockY <= 24 && oreChance > 0.84) {
-            return BLOCK_TYPES.gold_ore;
-        }
-
-        if (blockY <= 42 && oreChance > 0.77) {
-            return BLOCK_TYPES.iron_ore;
-        }
-
-        if (blockY <= 58 && oreChance > 0.71) {
-            return BLOCK_TYPES.coal_ore;
-        }
+        if (blockY <= 15 && oreChance > 0.94) return BLOCK_TYPES.diamond_ore;
+        if (blockY <= 28 && oreChance > 0.90) return BLOCK_TYPES.gold_ore;
+        if (blockY <= 30 && oreChance > 0.89) return BLOCK_TYPES.lapis_ore;
+        if (blockY <= 52 && oreChance > 0.82) return BLOCK_TYPES.iron_ore;
+        if (blockY <= 68 && oreChance > 0.76) return BLOCK_TYPES.coal_ore;
 
         return BLOCK_TYPES.stone;
     }
@@ -386,15 +399,33 @@ export class TerrainGenerator {
             return BLOCK_TYPES.air;
         }
 
+        if (blockY <= 0) {
+            return BLOCK_TYPES.bedrock;
+        }
+
+        const biome = this.getBiomeAt(blockX, blockZ);
+        const isBeach = surfaceHeight <= this.waterLevel + 1;
+        const isHighMountain = biome.key === 'mountains' && surfaceHeight >= this.waterLevel + 28;
+        const isStoneMountain = biome.key === 'mountains' && surfaceHeight >= this.waterLevel + 22;
+
         if (blockY === surfaceHeight - 1) {
+            if (biome.key === 'desert') return BLOCK_TYPES.sand;
+            if (biome.key === 'badlands') return BLOCK_TYPES.red_sand;
+            if (isHighMountain) return BLOCK_TYPES.snow;
+            if (isStoneMountain) return BLOCK_TYPES.stone;
+            if (isBeach) return BLOCK_TYPES.sand;
             return BLOCK_TYPES.grass;
         }
 
         if (blockY >= surfaceHeight - 4) {
+            if (biome.key === 'desert') return BLOCK_TYPES.sand;
+            if (biome.key === 'badlands') return BLOCK_TYPES.red_sand;
+            if (isBeach) return BLOCK_TYPES.sand;
+            if (isStoneMountain) return BLOCK_TYPES.stone;
             return BLOCK_TYPES.dirt;
         }
 
-        return BLOCK_TYPES.stone;
+        return this.getSubsurfaceBlockIdAt(blockX, blockY, blockZ, surfaceHeight);
     }
 
     estimateSlopeAt(x, z) {

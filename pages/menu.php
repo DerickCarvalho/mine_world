@@ -5,8 +5,7 @@
 
     <div class="menu-screen__actions" aria-label="Acoes principais do MineWorld">
         <button class="button button--primary menu-screen__button" type="button" data-nav-page="mundos">Jogar</button>
-        <button class="button button--ghost menu-screen__button" type="button" data-nav-page="texturas">Texturas</button>
-        <button class="button button--ghost menu-screen__button" type="button" data-nav-page="comandos">Comandos</button>
+<button class="button button--ghost menu-screen__button" type="button" data-nav-page="comandos">Comandos</button>
         <button class="button button--ghost menu-screen__button" type="button" data-nav-page="opcoes">Opcoes</button>
     </div>
 

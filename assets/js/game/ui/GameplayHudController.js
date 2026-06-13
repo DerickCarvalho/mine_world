@@ -29,7 +29,8 @@ export class GameplayHudController {
                 runtime.inventoryCursorStack,
                 {
                     gameMode: runtime.gameMode,
-                    recipes: runtime.recipes,
+                    craftGridSlots: runtime.craftGridSlots,
+                    craftOutputSlot: runtime.craftOutputSlot,
                     creativePalette: runtime.creativePalette
                 }
             );

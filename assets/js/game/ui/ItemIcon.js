@@ -1,5 +1,6 @@
 import { getBlockDefinitionByKey, getBlockFaceBaseColor, isPlaceableBlock } from '../world/BlockTypes.js';
 import { getBlockTextureCatalog } from '../world/ChunkMaterials.js';
+import { getItemTexturePath } from '../world/ItemTextureMap.js';
 
 function escapeHtml(value) {
     return String(value || '')
@@ -38,6 +39,12 @@ export function renderItemIconMarkup(blockKey, sizeClass, variant) {
     const variantClass = variant ? ' game-item-icon--' + escapeHtml(variant) : '';
 
     if (!isPlaceableBlock(definition.id)) {
+        const itemPath = getItemTexturePath(definition.key);
+        if (itemPath) {
+            return '<span class="game-item-icon game-item-icon--flat game-item-icon--item-' + escapeHtml(definition.key) + iconSizeClass + variantClass + '" aria-hidden="true" title="' + escapeHtml(definition.name) + '">'
+                + '<img class="game-item-icon__img" src="' + escapeHtml(itemPath) + '" alt="' + escapeHtml(definition.name) + '" draggable="false" style="width:100%;height:100%;object-fit:contain;image-rendering:pixelated;">'
+                + '</span>';
+        }
         return '<span class="game-item-icon game-item-icon--flat game-item-icon--item-' + escapeHtml(definition.key) + iconSizeClass + variantClass + '" aria-hidden="true" title="' + escapeHtml(definition.name) + '">'
             + '<span class="game-item-icon__flat"></span>'
             + '</span>';

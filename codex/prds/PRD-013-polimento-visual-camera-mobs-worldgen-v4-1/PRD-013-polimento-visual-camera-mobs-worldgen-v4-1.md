@@ -1,4 +1,4 @@
-# PRD-013: Polimento visual, camera livre e worldgen 4.1
+﻿# PRD-013: Polimento visual, camera livre e worldgen 4.1
 
 ## Resumo Executivo
 
@@ -9,7 +9,7 @@
 | **Titulo** | Polimento visual, camera livre e worldgen 4.1 |
 | **Tipo** | Melhoria de gameplay e apresentacao |
 | **Prioridade** | Alta |
-| **Status** | Concluida |
+| **Status** | Implementada |
 | **Data** | 12/06/2026 |
 | **Autor** | Codex |
 | **Dependencias** | PRD-010, PRD-011 e PRD-012 |
@@ -174,16 +174,16 @@ Essa PRD deve aproximar a leitura e o conforto de uso de um sandbox voxel mais m
 
 ## Criterios de Aceite
 
-- [ ] **CA-01:** O jogador consegue olhar para cima e para baixo ate o extremo visual esperado, sem zona morta angular perceptivel.
-- [ ] **CA-02:** Crosshair, raycast, quebra, colocacao e picking de entidade continuam funcionais mesmo proximo aos extremos verticais.
-- [ ] **CA-03:** Quando o slot ativo esta vazio, a gameplay exibe uma mao vazia consistente; quando ha item, exibe o held item refinado sem sobreposicao quebrada.
-- [ ] **CA-04:** Hotbar e inventario exibem icones mais legiveis e coerentes com o mundo para pelo menos os blocos basicos mais usados.
-- [ ] **CA-05:** O mob base apresenta silhueta melhor resolvida e animacao perceptivel de idle e deslocamento sem flicker evidente.
-- [ ] **CA-06:** Spawn, follow toggle e picking do mob continuam funcionando apos o retrabalho visual.
-- [ ] **CA-07:** Mundos novos em `v4.1` apresentam pelo menos dois perfis de bioma adicionais ou claramente reequilibrados, com mais variedade de arvores e montanhas mais marcantes.
-- [ ] **CA-08:** Em smoke com multiplas seeds, o entorno inicial de mundos `v4.1` nao apresenta frequencia alta de buracos, overhangs artificiais ou spawn inviavel.
-- [ ] **CA-09:** Mundos antigos continuam carregando e salvando com seu `algorithm_version` original, sem migracao forcada.
-- [ ] **CA-10:** `npm test`, `npm run test:harness` e validacoes sintaticas aplicaveis passam.
+- [x] **CA-01:** O jogador consegue olhar para cima e para baixo ate o extremo visual esperado, sem zona morta angular perceptivel.
+- [x] **CA-02:** Crosshair, raycast, quebra, colocacao e picking de entidade continuam funcionais mesmo proximo aos extremos verticais.
+- [x] **CA-03:** Quando o slot ativo esta vazio, a gameplay exibe uma mao vazia consistente; quando ha item, exibe o held item refinado sem sobreposicao quebrada.
+- [x] **CA-04:** Hotbar e inventario exibem icones mais legiveis e coerentes com o mundo para pelo menos os blocos basicos mais usados.
+- [x] **CA-05:** O mob base apresenta silhueta melhor resolvida e animacao perceptivel de idle e deslocamento sem flicker evidente.
+- [x] **CA-06:** Spawn, follow toggle e picking do mob continuam funcionando apos o retrabalho visual.
+- [x] **CA-07:** Mundos novos em `v4.1` apresentam pelo menos dois perfis de bioma adicionais ou claramente reequilibrados, com mais variedade de arvores e montanhas mais marcantes.
+- [x] **CA-08:** Em smoke com multiplas seeds, o entorno inicial de mundos `v4.1` nao apresenta frequencia alta de buracos, overhangs artificiais ou spawn inviavel.
+- [x] **CA-09:** Mundos antigos continuam carregando e salvando com seu `algorithm_version` original, sem migracao forcada.
+- [x] **CA-10:** `npm test`, `npm run test:harness` e validacoes sintaticas aplicaveis passam.
 
 ## Historico de Requisitos
 
@@ -206,3 +206,5 @@ Essa PRD deve aproximar a leitura e o conforto de uso de um sandbox voxel mais m
 | PRD tecnica | [PRD-TECNICA-013-polimento-visual-camera-mobs-worldgen-v4-1.md](./PRD-TECNICA-013-polimento-visual-camera-mobs-worldgen-v4-1.md) |
 | Tasks | [tasks/](./tasks/) |
 | Validacao final | [PRD-013-validacao.md](../../execucoes/PRD-013-validacao.md) |
+
+

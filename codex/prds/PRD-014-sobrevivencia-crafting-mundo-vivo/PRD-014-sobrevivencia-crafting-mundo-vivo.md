@@ -1,4 +1,4 @@
-# PRD-014: Sobrevivencia, crafting e mundo vivo
+﻿# PRD-014: Sobrevivencia, crafting e mundo vivo
 
 ## Resumo Executivo
 
@@ -9,7 +9,7 @@
 | **Titulo** | Sobrevivencia, crafting e mundo vivo |
 | **Tipo** | Expansao de produto e gameplay |
 | **Prioridade** | Alta |
-| **Status** | Concluida |
+| **Status** | Implementada |
 | **Data** | 12/06/2026 |
 | **Autor** | Codex |
 | **Dependencias** | PRD-012 e PRD-013 |
@@ -193,19 +193,19 @@ Esta PRD deve aproximar o MineWorld da expectativa de um sandbox voxel mais comp
 
 ## Criterios de Aceite
 
-- [ ] **CA-01:** O jogo passa a oferecer novos blocos e pelo menos uma primeira linha de minerios distribuidos proceduralmente e coletaveis em gameplay.
-- [ ] **CA-02:** Inventario, hotbar, save e renderizacao reconhecem corretamente os novos blocos e recursos.
-- [ ] **CA-03:** O jogador consegue usar modo sobrevivencia com consumo de recursos e modo criativo com acesso livre ao catalogo previsto.
-- [ ] **CA-04:** O modo ativo fica claro na interface e nao causa inconsistencias ao salvar e reabrir o mundo.
-- [ ] **CA-05:** O inventario inclui area de crafting funcional e a execucao de um craft consome insumos corretamente.
-- [ ] **CA-06:** Existe uma lista de crafts legivel que mostra ao menos insumos e resultado.
-- [ ] **CA-07:** O mundo gera ao menos uma primeira camada de estruturas ou vilas em areas plausiveis e sem frequencia alta de spawn quebrado.
-- [ ] **CA-08:** O ecossistema inclui mais mobs do que o estado atual, sem travar o runtime nem quebrar o gato existente.
-- [ ] **CA-09:** Quando o slot ativo esta vazio, a mao vazia balanca de forma coerente durante o movimento.
-- [ ] **CA-10:** Itens na hotbar e no inventario ficam visualmente mais bonitos e legiveis do que a iteracao atual.
-- [ ] **CA-11:** Texturas anexadas passam a respeitar a orientacao correta nas faces ou o menu de texturas permite ajustar a direcao por face.
-- [ ] **CA-12:** O player permanece com `1.95` blocos de altura e corpo mais fino que um bloco, sem regressao de colisao.
-- [ ] **CA-13:** `npm test`, `npm run test:harness` e as validacoes sintaticas aplicaveis passam.
+- [x] **CA-01:** O jogo passa a oferecer novos blocos e pelo menos uma primeira linha de minerios distribuidos proceduralmente e coletaveis em gameplay.
+- [x] **CA-02:** Inventario, hotbar, save e renderizacao reconhecem corretamente os novos blocos e recursos.
+- [x] **CA-03:** O jogador consegue usar modo sobrevivencia com consumo de recursos e modo criativo com acesso livre ao catalogo previsto.
+- [x] **CA-04:** O modo ativo fica claro na interface e nao causa inconsistencias ao salvar e reabrir o mundo.
+- [x] **CA-05:** O inventario inclui area de crafting funcional e a execucao de um craft consome insumos corretamente.
+- [x] **CA-06:** Existe uma lista de crafts legivel que mostra ao menos insumos e resultado.
+- [x] **CA-07:** O mundo gera ao menos uma primeira camada de estruturas ou vilas em areas plausiveis e sem frequencia alta de spawn quebrado.
+- [x] **CA-08:** O ecossistema inclui mais mobs do que o estado atual, sem travar o runtime nem quebrar o gato existente.
+- [x] **CA-09:** Quando o slot ativo esta vazio, a mao vazia balanca de forma coerente durante o movimento.
+- [x] **CA-10:** Itens na hotbar e no inventario ficam visualmente mais bonitos e legiveis do que a iteracao atual.
+- [x] **CA-11:** Texturas anexadas passam a respeitar a orientacao correta nas faces ou o menu de texturas permite ajustar a direcao por face.
+- [x] **CA-12:** O player permanece com `1.95` blocos de altura e corpo mais fino que um bloco, sem regressao de colisao.
+- [x] **CA-13:** `npm test`, `npm run test:harness` e as validacoes sintaticas aplicaveis passam.
 
 ## Historico de Requisitos
 
@@ -229,3 +229,5 @@ Esta PRD deve aproximar o MineWorld da expectativa de um sandbox voxel mais comp
 | PRD tecnica | [PRD-TECNICA-014-sobrevivencia-crafting-mundo-vivo.md](./PRD-TECNICA-014-sobrevivencia-crafting-mundo-vivo.md) |
 | Tasks | [tasks/](./tasks/) |
 | Validacao final | [PRD-014-validacao.md](../../execucoes/PRD-014-validacao.md) |
+
+
